@@ -1,0 +1,17 @@
+# python runtime cache
+__pycache__/
+*.pyc
+
+# local database files
+*.db
+
+# environment and API keys
+.env
+
+# editor and IDE settings
+.vscode/
+.idea/
+
+# exported model binaries
+models/*.mindir
+models/*.ms

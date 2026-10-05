@@ -1,0 +1,6 @@
+# core image math and frame processing
+numpy>=1.21.0
+opencv-python>=4.5.0
+
+# local web server for dashboard telemetry
+flask>=2.0.0
