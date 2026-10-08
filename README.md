@@ -23,6 +23,7 @@ NeuSE
  ─ index.html
 ─ models
 ─ tests
+ ─ test_pipeline.py
 ─ .gitignore
 ─ requirements.txt
 ─ README.md
