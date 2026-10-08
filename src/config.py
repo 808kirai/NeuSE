@@ -1,4 +1,5 @@
-# basic runtime config for local dev and edge deployment
+# basic runtime config for local development and edge deployment
+# local config file for NeuSE project, used by src/pipeline.py and src/logger.py
 class config:
     conf_threshold = 0.85
     target_chip = "ascend310"
