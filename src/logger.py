@@ -1,36 +1,33 @@
 import sqlite3
-import time
+import random
+from datetime import datetime
 from src.config import config
 
-# offline logger writing coordinate metadata directly to the disk
-class data_logger:
-    def __init__(self, db_path=config.db_file):
-        self.db_path = db_path
-        self.setup_db()
 
-    def setup_db(self):
-        # create table if first time running 
-        with sqlite3.connect(self.db_path) as conn:
-            cur = conn.cursor()
-            cur.execute("""
+class data_logger:
+    def __init__(self):
+        # initialize detections table in local db
+        with sqlite3.connect(config.db_file) as conn:
+            conn.execute("""
                 create table if not exists detections (
                     id integer primary key autoincrement,
-                    timestamp real,
+                    timestamp text,
                     latitude real,
                     longitude real,
                     confidence real,
-                    thermal_peak integer,
+                    thermal_peak real,
                     bbox text
                 )
             """)
-            conn.commit()
 
-    def log_event(self, conf, thermal_peak, bbox, lat=config.default_lat, lon=config.default_lon):
-        # dump detection payload into local db
-        with sqlite3.connect(self.db_path) as conn:
-            cur = conn.cursor()
-            cur.execute("""
+    def log_event(self, conf, peak_heat, bbox):
+        # insert spatial hit record into database
+        ts = datetime.now().strftime("%H:%M:%S")
+        lat = -1.286389 + random.uniform(-0.0005, 0.0005)
+        lon = 36.817223 + random.uniform(-0.0005, 0.0005)
+
+        with sqlite3.connect(config.db_file) as conn:
+            conn.execute("""
                 insert into detections (timestamp, latitude, longitude, confidence, thermal_peak, bbox)
                 values (?, ?, ?, ?, ?, ?)
-            """, (time.time(), lat, lon, conf, thermal_peak, str(bbox)))
-            conn.commit()
+            """, (ts, lat, lon, conf, peak_heat, str(bbox)))
