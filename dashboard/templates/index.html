@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NeuSE Telemetry Console</title>
+    <style>
+        body { background: #0d1117; color: #c9d1d9; font-family: monospace; margin: 20px; }
+        h2 { color: #58a6ff; }
+        .card { background: #161b22; padding: 12px; border-radius: 6px; border: 1px solid #30363d; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px 12px; border: 1px solid #30363d; text-align: left; }
+        th { background: #21262d; color: #8b949e; }
+        .highlight { color: #3fb950; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>NeuSE Edge Telemetry</h2>
+    
+    <div class="card" id="status-box">
+        <!-- populated by js polling -->
+        Connecting to edge runtime...
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Timestamp</th>
+                <th>Latitude</th>
+                <th>Longitude</th>
+                <th>Confidence</th>
+                <th>Thermal Peak</th>
+            </tr>
+        </thead>
+        <tbody id="telemetry-body"></tbody>
+    </table>
+
+    <script>
+        // poll telemetry endpoint every 2 seconds
+        async function fetchTelemetry() {
+            try {
+                const res = await fetch('/api/telemetry');
+                const json = await res.json();
+                
+                // update system status bar
+                document.getElementById('status-box').innerHTML = 
+                    `Status: <span class="highlight">${json.status}</span> | Target: <b>${json.device}</b> | Active Detections: <b>${json.count}</b>`;
+
+                // render rows
+                const rows = json.data.map(item => `
+                    <tr>
+                        <td>${item.id}</td>
+                        <td>${item.timestamp}</td>
+                        <td>${item.latitude}</td>
+                        <td>${item.longitude}</td>
+                        <td>${(item.confidence * 100).toFixed(1)}%</td>
+                        <td>${item.thermal_peak}°C</td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('telemetry-body').innerHTML = rows;
+            } catch (err) {
+                document.getElementById('status-box').innerHTML = "Failed to connect to local edge server.";
+            }
+        }
+
+        setInterval(fetchTelemetry, 2000);
+        fetchTelemetry();
+    </script>
+</body>
+</html>
