@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NeuSE  Edge Telemetry Console</title>
     <style>
-        /* SF Pro font imports */
+        /* load the interface fonts */
         @font-face {
             font-family: 'SF Pro Display';
             src: url('https://applesocial.s3.amazonaws.com/assets/styles/fonts/sanfrancisco/sanfranciscodisplay-regular-webfont.woff2') format('woff2');
@@ -55,7 +55,7 @@
             margin: 0 auto;
         }
 
-        /* header navbar */
+        /* style the header */
         header {
             display: flex;
             justify-content: space-between;
@@ -97,7 +97,7 @@
             box-shadow: 0 0 8px rgba(254, 254, 254, 0.8);
         }
 
-        /* grid metrics */
+        /* lay out the metrics */
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -132,7 +132,7 @@
             letter-spacing: -0.02em;
         }
 
-        /* table styling */
+        /* style the telemetry table */
         .table-wrapper {
             background: var(--card);
             border: 1px solid var(--border);
@@ -228,13 +228,13 @@
     </div>
 
     <script>
-        // poll telemetry api every 2s
+        // check for telemetry every two seconds
         async function updateTelemetry() {
             try {
                 const res = await fetch('/api/telemetry');
                 const json = await res.json();
 
-                // update dashboard metrics
+                // update the dashboard metrics
                 document.getElementById('device-name').innerText = json.device || 'Ascend 310';
                 document.getElementById('detection-count').innerText = json.count || 0;
 
@@ -245,7 +245,7 @@
                     return;
                 }
 
-                // render detection records
+                // display the detection records
                 const rows = json.data.map(item => `
                     <tr>
                         <td>#${item.id}</td>

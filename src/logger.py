@@ -6,7 +6,7 @@ from src.config import config
 
 class data_logger:
     def __init__(self):
-        # initialize detections table in local db
+        # create the local detections table
         with sqlite3.connect(config.db_file) as conn:
             conn.execute("""
                 create table if not exists detections (
@@ -21,7 +21,7 @@ class data_logger:
             """)
 
     def log_event(self, conf, peak_heat, bbox):
-        # insert spatial hit record into database
+        # save the detection and its location
         ts = datetime.now().strftime("%H:%M:%S")
         lat = -1.286389 + random.uniform(-0.0005, 0.0005)
         lon = 36.817223 + random.uniform(-0.0005, 0.0005)

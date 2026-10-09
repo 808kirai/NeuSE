@@ -12,7 +12,7 @@ from src.config import config
 app = Flask(__name__)
 
 def fetch_recent_logs():
-    # pull latest 15 detections from sqlite
+    # fetch the 15 most recent detections
     try:
         with sqlite3.connect(config.db_file) as conn:
             conn.row_factory = sqlite3.Row
@@ -28,12 +28,12 @@ def fetch_recent_logs():
 
 @app.route("/")
 def index():
-    # render telemetry dashboard UI
+    # show the telemetry dashboard
     return render_template("index.html")
 
 @app.route("/api/telemetry")
 def telemetry():
-    # JSON endpoint for dashboard frontend
+    # return telemetry as json
     logs = fetch_recent_logs()
     return jsonify({
         "status": "online",
