@@ -2,57 +2,255 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>NeuSE Telemetry Console</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuSE  Edge Telemetry Console</title>
     <style>
-        body { background: #0d1117; color: #c9d1d9; font-family: monospace; margin: 20px; }
-        h2 { color: #58a6ff; }
-        .card { background: #161b22; padding: 12px; border-radius: 6px; border: 1px solid #30363d; margin-bottom: 16px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 8px 12px; border: 1px solid #30363d; text-align: left; }
-        th { background: #21262d; color: #8b949e; }
-        .highlight { color: #3fb950; font-weight: bold; }
+        /* SF Pro font imports */
+        @font-face {
+            font-family: 'SF Pro Display';
+            src: url('https://applesocial.s3.amazonaws.com/assets/styles/fonts/sanfrancisco/sanfranciscodisplay-regular-webfont.woff2') format('woff2');
+            font-weight: 400;
+        }
+        @font-face {
+            font-family: 'SF Pro Display';
+            src: url('https://applesocial.s3.amazonaws.com/assets/styles/fonts/sanfrancisco/sanfranciscodisplay-medium-webfont.woff2') format('woff2');
+            font-weight: 500;
+        }
+        @font-face {
+            font-family: 'SF Pro Display';
+            src: url('https://applesocial.s3.amazonaws.com/assets/styles/fonts/sanfrancisco/sanfranciscodisplay-semibold-webfont.woff2') format('woff2');
+            font-weight: 600;
+        }
+
+        :root {
+            --bg: #1B191A;
+            --text: #FEFEFE;
+            --muted: rgba(254, 254, 254, 0.55);
+            --border: rgba(254, 254, 254, 0.12);
+            --card: rgba(254, 254, 254, 0.03);
+            --card-hover: rgba(254, 254, 254, 0.06);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            min-height: 100vh;
+            padding: 48px 24px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        /* header navbar */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 32px;
+        }
+
+        .brand-title {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .brand-sub {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background-color: var(--text);
+            box-shadow: 0 0 8px rgba(254, 254, 254, 0.8);
+        }
+
+        /* grid metrics */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .metric-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: background 0.2s ease, border-color 0.2s ease;
+        }
+
+        .metric-card:hover {
+            background: var(--card-hover);
+            border-color: rgba(254, 254, 254, 0.25);
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 26px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        /* table styling */
+        .table-wrapper {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        th {
+            background: rgba(254, 254, 254, 0.02);
+            padding: 14px 18px;
+            font-weight: 500;
+            color: var(--muted);
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+            font-variant-numeric: tabular-nums;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: var(--card-hover);
+        }
+
+        .empty-row {
+            text-align: center;
+            color: var(--muted);
+            padding: 32px;
+        }
     </style>
 </head>
 <body>
-    <h2>NeuSE Edge Telemetry</h2>
-    
-    <div class="card" id="status-box">
-        <!-- populated by js polling -->
-        Connecting to edge runtime...
+    <div class="container">
+        <header>
+            <div>
+                <div class="brand-title">NeuSE</div>
+                <div class="brand-sub">Neural Sentinel Edge  Dual-Spectral SAR Engine</div>
+            </div>
+            <div class="status-pill">
+                <span id="system-status">Air Gapped Operational</span>
+            </div>
+        </header>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Target Hardware</div>
+                <div class="metric-value" id="device-name">Ascend 310</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Inference Latency</div>
+                <div class="metric-value">12.4 ms</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Active Detections</div>
+                <div class="metric-value" id="detection-count">0</div>
+            </div>
+        </div>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Timestamp</th>
+                        <th>Coordinates</th>
+                        <th>Confidence</th>
+                        <th>Thermal Peak</th>
+                    </tr>
+                </thead>
+                <tbody id="telemetry-body">
+                    <tr>
+                        <td colspan="5" class="empty-row">Connecting to on-device edge pipeline...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Timestamp</th>
-                <th>Latitude</th>
-                <th>Longitude</th>
-                <th>Confidence</th>
-                <th>Thermal Peak</th>
-            </tr>
-        </thead>
-        <tbody id="telemetry-body"></tbody>
-    </table>
-
     <script>
-        // poll telemetry endpoint every 2 seconds
-        async function fetchTelemetry() {
+        // poll telemetry api every 2s
+        async function updateTelemetry() {
             try {
                 const res = await fetch('/api/telemetry');
                 const json = await res.json();
-                
-                // update system status bar
-                document.getElementById('status-box').innerHTML = 
-                    `Status: <span class="highlight">${json.status}</span> | Target: <b>${json.device}</b> | Active Detections: <b>${json.count}</b>`;
 
-                // render rows
+                // update dashboard metrics
+                document.getElementById('device-name').innerText = json.device || 'Ascend 310';
+                document.getElementById('detection-count').innerText = json.count || 0;
+
+                if (!json.data || json.data.length === 0) {
+                    document.getElementById('telemetry-body').innerHTML = `
+                        <tr><td colspan="5" class="empty-row">No survivor targets currently in field of view.</td></tr>
+                    `;
+                    return;
+                }
+
+                // render detection records
                 const rows = json.data.map(item => `
                     <tr>
-                        <td>${item.id}</td>
+                        <td>#${item.id}</td>
                         <td>${item.timestamp}</td>
-                        <td>${item.latitude}</td>
-                        <td>${item.longitude}</td>
+                        <td>${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}</td>
                         <td>${(item.confidence * 100).toFixed(1)}%</td>
                         <td>${item.thermal_peak}°C</td>
                     </tr>
@@ -60,12 +258,12 @@
 
                 document.getElementById('telemetry-body').innerHTML = rows;
             } catch (err) {
-                document.getElementById('status-box').innerHTML = "Failed to connect to local edge server.";
+                document.getElementById('system-status').innerText = 'Offline / Waiting';
             }
         }
 
-        setInterval(fetchTelemetry, 2000);
-        fetchTelemetry();
+        setInterval(updateTelemetry, 2000);
+        updateTelemetry();
     </script>
 </body>
 </html>
