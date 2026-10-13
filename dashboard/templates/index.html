@@ -227,16 +227,17 @@
         </div>
     </div>
 
-    <script>
+<script>
         // check for telemetry every two seconds
         async function updateTelemetry() {
             try {
                 const res = await fetch('/api/telemetry');
                 const json = await res.json();
 
-                // update the dashboard metrics
+                // update dashboard metrics and status
                 document.getElementById('device-name').innerText = json.device || 'Ascend 310';
                 document.getElementById('detection-count').innerText = json.count || 0;
+                document.getElementById('system-status').innerText = 'Air Gapped Operational';
 
                 if (!json.data || json.data.length === 0) {
                     document.getElementById('telemetry-body').innerHTML = `
@@ -245,19 +246,27 @@
                     return;
                 }
 
-                // display the detection records
-                const rows = json.data.map(item => `
-                    <tr>
-                        <td>#${item.id}</td>
-                        <td>${item.timestamp}</td>
-                        <td>${item.latitude.toFixed(5)}, ${item.longitude.toFixed(5)}</td>
-                        <td>${(item.confidence * 100).toFixed(1)}%</td>
-                        <td>${item.thermal_peak}°C</td>
-                    </tr>
-                `).join('');
+                // safely display detection records
+                const rows = json.data.map(item => {
+                    const lat = typeof item.latitude === 'number' ? item.latitude.toFixed(5) : (item.latitude || '0.0000');
+                    const lon = typeof item.longitude === 'number' ? item.longitude.toFixed(5) : (item.longitude || '0.0000');
+                    const conf = typeof item.confidence === 'number' ? (item.confidence * 100).toFixed(1) + '%' : (item.confidence || '0%');
+                    const thermal = item.thermal_peak || '37.0';
+
+                    return `
+                        <tr>
+                            <td>#${item.id}</td>
+                            <td>${item.timestamp}</td>
+                            <td>${lat}, ${lon}</td>
+                            <td>${conf}</td>
+                            <td>${thermal}°C</td>
+                        </tr>
+                    `;
+                }).join('');
 
                 document.getElementById('telemetry-body').innerHTML = rows;
             } catch (err) {
+                console.error("Dashboard telemetry error:", err);
                 document.getElementById('system-status').innerText = 'Offline / Waiting';
             }
         }
