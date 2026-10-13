@@ -71,5 +71,5 @@ def test_latency_performance(pipeline):
 
     latency_ms = (end_time - start_time) * 1000
 
-    # Adjusted threshold for local CPU testing environment
+    # adjusted threshold for local CPU testing environment
     assert latency_ms < 150.0, f"Latency warning! Execution took {latency_ms:.2f}ms"
