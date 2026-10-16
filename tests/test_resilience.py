@@ -1,5 +1,6 @@
 import sys
 import os
+import statistics
 import time
 import pytest
 import numpy as np
@@ -66,11 +67,15 @@ def test_latency_performance(pipeline):
     # warm up the pipeline before measuring
     pipeline.process_frames(rgb, thermal)
 
-    start_time = time.perf_counter()
-    pipeline.process_frames(rgb, thermal)
-    end_time = time.perf_counter()
+    # time many runs and use the median so one slow run from background work does not fail the test
+    timings = []
+    for _ in range(20):
+        start_time = time.perf_counter()
+        pipeline.process_frames(rgb, thermal)
+        end_time = time.perf_counter()
+        timings.append((end_time - start_time) * 1000)
 
-    latency_ms = (end_time - start_time) * 1000
+    latency_ms = statistics.median(timings)
 
     # adjusted threshold for local CPU testing environment
     assert latency_ms < 150.0, f"Latency warning! Execution took {latency_ms:.2f}ms"

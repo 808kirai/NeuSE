@@ -1,5 +1,6 @@
 import sys
 import os
+import statistics
 import unittest
 import time
 import cv2
@@ -58,14 +59,18 @@ class TestPipelineRobustness(unittest.TestCase):
         raw_frame = np.zeros((480, 640, 3), dtype=np.uint8)
         _, encoded_buffer = cv2.imencode('.jpg', raw_frame)
 
-        t0 = time.time()
-        # decode the frame before processing
-        decoded_rgb = cv2.imdecode(encoded_buffer, cv2.IMREAD_COLOR)
-        res = self.pipe.process_frames(decoded_rgb, decoded_rgb)
-        e2e_lat = (time.time() - t0) * 1000
+        # time many runs and use the median so one slow run from background work does not fail the test
+        timings = []
+        for _ in range(20):
+            t0 = time.perf_counter()
+            # decode the frame before processing
+            decoded_rgb = cv2.imdecode(encoded_buffer, cv2.IMREAD_COLOR)
+            self.pipe.process_frames(decoded_rgb, decoded_rgb)
+            timings.append((time.perf_counter() - t0) * 1000)
+        e2e_lat = statistics.median(timings)
 
         # print the time so it shows up with pytest -s
-        print(f"\n[E2E Stream Profile] Ingestion + Decode + Processing Latency: {e2e_lat:.2f}ms")
+        print(f"\n[E2E Stream Profile] Ingestion + Decode + Processing Latency: {e2e_lat:.2f}ms median of 20 runs")
         self.assertLess(e2e_lat, 15.0)
 
 if __name__ == "__main__":
