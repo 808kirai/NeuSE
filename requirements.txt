@@ -4,3 +4,6 @@ opencv-python>=4.5.0
 
 # local web server for dashboard telemetry
 flask>=2.0.0
+
+# automated test suite
+pytest>=7.0.0

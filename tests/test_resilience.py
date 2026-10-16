@@ -27,7 +27,7 @@ def test_valid_frame_processing(pipeline):
     """check normal frame processing"""
     valid_rgb = np.ones((480, 640, 3), dtype=np.uint8) * 128
     valid_thermal = np.ones((480, 640, 3), dtype=np.uint8) * 100
-
+                                                        
     results = pipeline.process_frames(valid_rgb, valid_thermal)
     assert isinstance(results, list), "Pipeline did not return a list for valid inputs"
 
@@ -56,7 +56,6 @@ def test_pipeline_resilience(pipeline, bad_input):
 
 
 # check processing latency
-# check processing latency
 def test_latency_performance(pipeline):
     """check that frame processing stays within a realistic execution budget"""
     rgb = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
@@ -72,4 +71,4 @@ def test_latency_performance(pipeline):
     latency_ms = (end_time - start_time) * 1000
 
     # adjusted threshold for local CPU testing environment
-    assert latency_ms < 150.0, f"Latency warning! Execution took {latency_ms:.2f}ms"
+    assert latency_ms < 150.0, f"Latency warning! Execution took {latency_ms:.2f}ms"  

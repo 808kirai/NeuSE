@@ -1,42 +1,73 @@
-NeuSE (Neural Sentinel Edge)
-Offline edge-native dual-spectral AI system for search and rescue operations in zero-connectivity environments. Built for the Huawei ICT Competition Innovation Track.
+# NeuSE
 
-Problem Statement
-In disaster zones such as earthquakes, floods, or remote wilderness, communication infrastructure is routinely destroyed or unavailable. Standard cloud-dependent AI tools fail in these situations because they require continuous high-bandwidth internet connectivity to process optical and thermal camera feeds. NeuSE solves this by running quantized computer vision models directly on edge hardware, providing real-time survivor and hazard detection without any network dependency.
+Neural Sentinel Edge helps rescue teams find survivors in thermal camera footage, even where there is no network. Each field unit runs detection on the spot and is designed to send its results to a cloud command center whenever a connection is available.
 
-System Architecture
-The project bridges cloud-based model training with completely air-gapped local edge execution:
-- Huawei Cloud ModelArts: Handles dataset management, data labeling, model training, and hyperparameter tuning on high-performance cloud clusters.
-- MindSpore Lite: Quantizes and optimizes trained dual-spectral detection models for low-power edge accelerators.
-- Intelligent EdgeFabric (IEF): Controls containerized deployments, manages edge node configurations, and syncs incident telemetry when network links are temporarily established.
-- Local Edge Gateway: Processes incoming RGB and thermal frames locally and hosts an offline web telemetry interface for incident commanders.
+Built for the Huawei ICT Competition 2026–2027 Innovation Track.
 
-Technical Specifications
-- Core Runtime: Python 3.12, Flask
-- Vision Pipeline: OpenCV, NumPy (dual-spectral frame fusion and anomaly detection)
-- Cloud and Edge Tools: Huawei Cloud ModelArts, Intelligent EdgeFabric (IEF), MindSpore Lite
-- Testing Suite: Pytest (automated resilience, adversarial input, and latency verification)
+## Why it matters
+After earthquakes and floods, or in remote areas, the network is often the first thing to go. AI tools that depend on the cloud stop working just when rescuers need them most. NeuSE keeps detection on the device, so it works offline, and is designed to share results with the wider team once a link is back.
 
-Repository Layout
-- [src/]: Core dual-spectral processing pipeline (`pipeline.py`), system configuration (`config.py`) and local event logging (`logger.py`)
-- [dashboard/]: Offline Flask web interface (`app.py`) for local command telemetry and real-time alerts
-- [models/]: Storage directory for quantized edge weights
-- [tests/]: Automated resilience and latency test suite (`test_resilience.py`)
-- [requirements.txt]: Project environment dependencies
+## Where it stands
+NeuSE is an early prototype.
 
-Getting Started
-1. Clone the repository:
+**Working now**
+- Thermal detection using a classical computer vision baseline
+- Safe handling of missing, empty, 16 bit, float and odd shaped frames
+- A local detection log, with the measured processing time of every frame
+- A local dashboard showing logged detections
+- Automated tests
+
+**Planned**
+- A person detector trained with MindYOLO on Huawei Cloud ModelArts, using the HIT-UAV thermal dataset
+- On-device inference with MindSpore Lite
+- Using the RGB camera to confirm thermal hits and cut false alarms
+- Syncing detections to a command center on Huawei Cloud
+- Live GPS, in place of the fixed position each unit uses today
+
+The baseline flags any warm area of the right size, so it cannot tell a person from a car engine. It gives no confidence score because there is no model behind it. It stays in the project as the benchmark the trained detector has to beat.
+
+## Layout
+| Path | What it holds |
+|---|---|
+| `src/pipeline.py` | Thermal detection |
+| `src/logger.py` | Local detection log in SQLite |
+| `src/config.py` | Thresholds, unit position and database location |
+| `dashboard/` | Local web dashboard |
+| `scripts/simulate_feed.py` | Sends generated thermal frames through the real pipeline for demos |
+| `models/` | Where trained model files will go |
+| `tests/` | Automated tests |
+| `docs/ARCHITECTURE.md` | How the parts fit together |
+
+## Run it
+Tested on Python 3.12.
+
+```bash
 git clone https://github.com/808kirai/NeuSE.git
 cd NeuSE
-2. Install dependencies:
 pip install -r requirements.txt
-3. Execute verification tests:
-pytest tests/test_resilience.py -v
-4. Start the offline monitoring dashboard:
+
+# run the tests
+pytest -v
+
+# terminal 1: generate detections
+python scripts/simulate_feed.py --frames 120
+
+# terminal 2: open the dashboard at http://127.0.0.1:5000
 python dashboard/app.py
+```
 
-Performance Verification
-The system includes an automated test suite verifying system stability across edge-case conditions, including missing frames (None), completely dark frames, fully white/saturated frames, and unexpected frame resolutions (1x1). Execution latency is benchmarked locally to ensure frame processing remains within operational execution budgets.
+To run the pipeline once on a test frame, use `python -m src.pipeline`.
 
-License
-Distributed under the MIT License. See LICENSE for details.
+## Settings
+| Variable | Default | Use |
+|---|---|---|
+| `NEUSE_DB` | `neuse_local.db` in the project folder | Detection database |
+| `NEUSE_HOST` | `127.0.0.1` | Set to `0.0.0.0` to open the dashboard to other devices |
+| `NEUSE_PORT` | `5000` | Dashboard port |
+| `NEUSE_DEBUG` | off | Set to `1` for Flask debug mode, on a trusted dev machine only |
+
+## Performance
+Every frame is timed, and the time is saved with its detections. The dashboard shows the average. Run `pytest -s` to see the numbers on your own machine.
+
+## License
+MIT. See `LICENSE`.

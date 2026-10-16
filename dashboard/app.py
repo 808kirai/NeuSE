@@ -1,95 +1,67 @@
+import os
 import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
-from datetime import datetime, timedelta
 
-# Make sure the project root is on the Python path so local modules can be imported.
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+# put the project root on the path so src can be imported
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
-# Flask app setup and project config.
 from flask import Flask, render_template, jsonify
-from src.config import config
+from src.logger import data_logger, connect
 
 app = Flask(__name__)
 
-# Keep the SQLite database in the project root so it works no matter where the app starts.
-DB_PATH = PROJECT_ROOT / "neuse_local.db"
+# make sure the table exists without touching saved detections
+data_logger()
 
 
-def init_db():
-    """Create the detections table and load a few sample readings for the dashboard."""
+def fetch_telemetry(limit=15):
+    # newest detections plus the total count
     try:
-        with sqlite3.connect(DB_PATH) as conn:
-            cur = conn.cursor()
-            # Reset the table so the app always starts with a clean, known dataset.
-            cur.execute("DROP TABLE IF EXISTS detections")
-            cur.execute("""
-                CREATE TABLE detections (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT,
-                    latitude REAL,
-                    longitude REAL,
-                    confidence REAL,
-                    thermal_peak REAL,
-                    bbox TEXT
-                )
-            """)
-
-            # Seed the app with recent sample telemetry to test the UI immediately.
-            sample_data = [
-                (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), -1.29210, 36.82190, 0.945, 41.2, '[45, 60, 120, 180]'),
-                ((datetime.now() - timedelta(minutes=2)).strftime('%Y-%m-%d %H:%M:%S'), -1.29450, 36.82500, 0.891, 39.8, '[12, 40, 95, 150]'),
-                ((datetime.now() - timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S'), -1.29000, 36.81900, 0.968, 42.5, '[200, 150, 280, 310]')
-            ]
-            cur.executemany("""
-                INSERT INTO detections (timestamp, latitude, longitude, confidence, thermal_peak, bbox)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, sample_data)
-            conn.commit()
-    except Exception as e:
-        print(f"Database initialization error: {e}")
-
-# Build the local SQLite data store as soon as the app loads.
-init_db()
-
-
-def fetch_recent_logs():
-    """Fetch the newest detections in a format the frontend can render."""
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
+        with closing(connect()) as conn:
             conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT id, timestamp, latitude, longitude, confidence, thermal_peak, bbox 
-                FROM detections 
-                ORDER BY id DESC LIMIT 15
-            """)
-            return [dict(r) for r in cur.fetchall()]
-    except Exception as e:
-        print(f"Fetch logs error: {e}")
-        return []
+            rows = conn.execute("""
+                select id, timestamp, latitude, longitude, confidence, thermal_peak, bbox, detector, latency_ms
+                from detections
+                order by id desc limit ?
+            """, (limit,)).fetchall()
+            total = conn.execute("select count(*) from detections").fetchone()[0]
+    except sqlite3.Error as err:
+        print(f"could not read detections {err}")
+        return [], 0
+
+    return [dict(r) for r in rows], total
 
 
 @app.route("/")
 def index():
-    # Serve the main dashboard page.
     return render_template("index.html")
 
 
 @app.route("/api/telemetry")
 def telemetry():
-    # Return the most recent detections to the frontend as JSON.
-    logs = fetch_recent_logs()
+    logs, total = fetch_telemetry()
+    latencies = [r["latency_ms"] for r in logs if r["latency_ms"] is not None]
     return jsonify({
         "status": "online",
-        "device": config.target_chip,
+        "detector": logs[0]["detector"] if logs else None,
+        "total": total,
         "count": len(logs),
+        # average measured time per frame across recent detections
+        "avg_latency_ms": round(sum(latencies) / len(latencies), 2) if latencies else None,
         "data": logs
     })
 
 
 if __name__ == "__main__":
-    # Run the app locally for development and live dashboard testing.
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # local only by default
+    # set NEUSE_HOST=0.0.0.0 to open it to the network
+    # set NEUSE_DEBUG=1 only on a trusted dev machine
+    app.run(
+        host=os.environ.get("NEUSE_HOST", "127.0.0.1"),
+        port=int(os.environ.get("NEUSE_PORT", "5000")),
+        debug=os.environ.get("NEUSE_DEBUG") == "1",
+    )

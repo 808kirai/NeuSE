@@ -3,25 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuSE  Edge Telemetry Console</title>
+    <title>NeuSE · Edge Telemetry Console</title>
     <style>
-        /* load the interface fonts */
-        @font-face {
-            font-family: 'SF Pro Display';
-            src: url('https://applesocial.s3.amazonaws.com/assets/styles/fonts/sanfrancisco/sanfranciscodisplay-regular-webfont.woff2') format('woff2');
-            font-weight: 400;
-        }
-        @font-face {
-            font-family: 'SF Pro Display';
-            src: url('https://applesocial.s3.amazonaws.com/assets/styles/fonts/sanfrancisco/sanfranciscodisplay-medium-webfont.woff2') format('woff2');
-            font-weight: 500;
-        }
-        @font-face {
-            font-family: 'SF Pro Display';
-            src: url('https://applesocial.s3.amazonaws.com/assets/styles/fonts/sanfrancisco/sanfranciscodisplay-semibold-webfont.woff2') format('woff2');
-            font-weight: 600;
-        }
-
         :root {
             --bg: #1B191A;
             --text: #FEFEFE;
@@ -44,7 +27,7 @@
         body {
             background-color: var(--bg);
             color: var(--text);
-            font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             min-height: 100vh;
             padding: 48px 24px;
             -webkit-font-smoothing: antialiased;
@@ -185,24 +168,24 @@
         <header>
             <div>
                 <div class="brand-title">NeuSE</div>
-                <div class="brand-sub">Neural Sentinel Edge  Dual-Spectral SAR Engine</div>
+                <div class="brand-sub">Neural Sentinel Edge · Search &amp; Rescue Telemetry</div>
             </div>
             <div class="status-pill">
-                <span id="system-status">Air Gapped Operational</span>
+                <span id="system-status">Connecting...</span>
             </div>
         </header>
 
         <div class="metrics-grid">
             <div class="metric-card">
-                <div class="metric-label">Target Hardware</div>
-                <div class="metric-value" id="device-name">Ascend 310</div>
+                <div class="metric-label">Detector</div>
+                <div class="metric-value" id="detector-name">—</div>
             </div>
             <div class="metric-card">
-                <div class="metric-label">Inference Latency</div>
-                <div class="metric-value">12.4 ms</div>
+                <div class="metric-label">Avg. Processing Time</div>
+                <div class="metric-value" id="avg-latency">—</div>
             </div>
             <div class="metric-card">
-                <div class="metric-label">Active Detections</div>
+                <div class="metric-label">Total Detections</div>
                 <div class="metric-value" id="detection-count">0</div>
             </div>
         </div>
@@ -215,12 +198,12 @@
                         <th>Timestamp</th>
                         <th>Coordinates</th>
                         <th>Confidence</th>
-                        <th>Thermal Peak</th>
+                        <th>Peak Intensity</th>
                     </tr>
                 </thead>
                 <tbody id="telemetry-body">
                     <tr>
-                        <td colspan="5" class="empty-row">Connecting to on-device edge pipeline...</td>
+                        <td colspan="5" class="empty-row">Connecting to the local pipeline...</td>
                     </tr>
                 </tbody>
             </table>
@@ -234,37 +217,43 @@
                 const res = await fetch('/api/telemetry');
                 const json = await res.json();
 
-                // update dashboard metrics and status
-                document.getElementById('device-name').innerText = json.device || 'Ascend 310';
-                document.getElementById('detection-count').innerText = json.count || 0;
-                document.getElementById('system-status').innerText = 'Air Gapped Operational';
+                // update the metrics and show a dash for anything not measured yet
+                document.getElementById('detector-name').textContent = json.detector || '—';
+                document.getElementById('avg-latency').textContent =
+                    typeof json.avg_latency_ms === 'number' ? json.avg_latency_ms.toFixed(1) + ' ms' : '—';
+                document.getElementById('detection-count').textContent = json.total || 0;
+                document.getElementById('system-status').textContent = 'Local node online';
+
+                const body = document.getElementById('telemetry-body');
+                body.replaceChildren();
 
                 if (!json.data || json.data.length === 0) {
-                    document.getElementById('telemetry-body').innerHTML = `
-                        <tr><td colspan="5" class="empty-row">No survivor targets currently in field of view.</td></tr>
-                    `;
+                    const row = body.insertRow();
+                    const cell = row.insertCell();
+                    cell.colSpan = 5;
+                    cell.className = 'empty-row';
+                    cell.textContent = 'No detections logged yet.';
                     return;
                 }
 
-                // safely display detection records
-                const rows = json.data.map(item => {
-                    const lat = typeof item.latitude === 'number' ? item.latitude.toFixed(5) : (item.latitude || '0.0000');
-                    const lon = typeof item.longitude === 'number' ? item.longitude.toFixed(5) : (item.longitude || '0.0000');
-                    const conf = typeof item.confidence === 'number' ? (item.confidence * 100).toFixed(1) + '%' : (item.confidence || '0%');
-                    const thermal = item.thermal_peak || '37.0';
-
-                    return `
-                        <tr>
-                            <td>#${item.id}</td>
-                            <td>${item.timestamp}</td>
-                            <td>${lat}, ${lon}</td>
-                            <td>${conf}</td>
-                            <td>${thermal}°C</td>
-                        </tr>
-                    `;
-                }).join('');
-
-                document.getElementById('telemetry-body').innerHTML = rows;
+                // use textContent so saved values are never treated as html
+                const fmt = (value, digits) => typeof value === 'number' ? value.toFixed(digits) : '—';
+                for (const item of json.data) {
+                    const conf = typeof item.confidence === 'number'
+                        ? (item.confidence * 100).toFixed(1) + '%'
+                        : 'n/a (baseline)';
+                    const cells = [
+                        '#' + item.id,
+                        (item.timestamp || '').replace('T', ' '),
+                        fmt(item.latitude, 5) + ', ' + fmt(item.longitude, 5),
+                        conf,
+                        typeof item.thermal_peak === 'number' ? item.thermal_peak + ' / 255' : '—',
+                    ];
+                    const row = body.insertRow();
+                    for (const text of cells) {
+                        row.insertCell().textContent = text;
+                    }
+                }
             } catch (err) {
                 console.error("Dashboard telemetry error:", err);
                 document.getElementById('system-status').innerText = 'Offline / Waiting';
