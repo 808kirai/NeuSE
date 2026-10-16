@@ -20,29 +20,37 @@ from src.pipeline import dual_spectral_pipeline
 
 
 def synthetic_thermal_frame(step, rng, height=480, width=640, targets=2):
+    # builds one fake thermal frame
+    # step moves the warm bodies a little so each frame is different
+
     # cool noisy background like rubble at night
     frame = rng.integers(0, 80, (height, width), dtype=np.uint8)
     for i in range(targets):
         # each warm body drifts slowly along its own path
         cx = int((150 + 220 * i + 6 * step) % (width - 60)) + 30
         cy = int(140 + 120 * i + 40 * np.sin(step / 8 + i))
+        # draw a warm oval roughly the size of a person seen from above
         cv2.ellipse(frame, (cx, cy), (18, 30), 0, 0, 360, 245, -1)
     return frame
 
 
 def main():
+    # read the command line options
     parser = argparse.ArgumentParser(description="feed generated thermal frames through the pipeline")
     parser.add_argument("--frames", type=int, default=60, help="how many frames to process")
     parser.add_argument("--interval", type=float, default=1.0, help="seconds between frames")
     parser.add_argument("--seed", type=int, default=0, help="random seed for the background noise")
     args = parser.parse_args()
 
+    # a fixed seed makes every run produce the same frames
     rng = np.random.default_rng(args.seed)
     pipe = dual_spectral_pipeline()
 
     for step in range(args.frames):
+        # only a thermal frame is sent since the baseline ignores rgb
         hits = pipe.process_frames(thermal_frame=synthetic_thermal_frame(step, rng))
         print(f"frame {step + 1}/{args.frames}  {len(hits)} detections in {pipe.last_latency_ms:.2f}ms")
+        # wait so the dashboard updates at a readable pace
         time.sleep(args.interval)
 
 

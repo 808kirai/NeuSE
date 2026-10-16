@@ -18,6 +18,7 @@ def thermal_with_target(dtype=np.uint8, peak=255):
 
 
 def stored_rows(db):
+    """every saved detection as a dict"""
     with sqlite3.connect(db) as conn:
         conn.row_factory = sqlite3.Row
         return [dict(r) for r in conn.execute("select * from detections")]
@@ -25,6 +26,7 @@ def stored_rows(db):
 
 @pytest.fixture
 def pipeline():
+    """fresh pipeline for each test"""
     return dual_spectral_pipeline()
 
 
@@ -49,15 +51,18 @@ def test_rgb_alone_is_not_treated_as_thermal(pipeline):
     thermal_with_target()[:, :, np.newaxis],   # single channel 3d array
 ])
 def test_non_uint8_and_single_channel_thermal(pipeline, frame):
+    """thermal cameras often give 16 bit or float frames instead of 8 bit"""
     assert len(pipeline.process_frames(thermal_frame=frame)) == 1
 
 
 def test_latency_is_measured(pipeline):
+    """every frame gets a real processing time"""
     pipeline.process_frames(thermal_frame=thermal_with_target())
     assert pipeline.last_latency_ms is not None and pipeline.last_latency_ms > 0
 
 
 def test_detection_is_logged_with_configured_position(pipeline, isolated_db):
+    """saved rows hold real values and nothing made up"""
     pipeline.process_frames(thermal_frame=thermal_with_target())
 
     rows = stored_rows(isolated_db)
@@ -83,6 +88,8 @@ def test_logger_upgrades_old_database(isolated_db):
             )
         """)
         conn.execute("insert into detections (timestamp) values ('12:00:00')")
+
+    # creating the logger should add the missing columns before saving
 
     data_logger().log_events(
         [{"bbox": [0, 0, 1, 1], "confidence": None, "thermal_peak": 1, "detector": "x"}], 1.0)

@@ -1,4 +1,4 @@
-# Models
+Models
 
 Trained model files are kept out of git. Files ending in `.mindir` and `.ms` are ignored.
 

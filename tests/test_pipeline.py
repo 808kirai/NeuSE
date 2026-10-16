@@ -10,6 +10,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.pipeline import dual_spectral_pipeline
 
+# robustness and speed checks written with unittest
+# pytest runs these too and gives them their own test database
 class TestPipelineRobustness(unittest.TestCase):
 
     def setUp(self):
@@ -33,7 +35,7 @@ class TestPipelineRobustness(unittest.TestCase):
         res_odd = self.pipe.process_frames(odd_shape, odd_shape)
         self.assertIsInstance(res_odd, list)
 
-        # check a dark scene
+        # check a dark scene, which should give no detections
         pitch_black = np.zeros((480, 640, 3), dtype=np.uint8)
         res_black = self.pipe.process_frames(pitch_black, pitch_black)
         self.assertEqual(len(res_black), 0)
@@ -62,6 +64,7 @@ class TestPipelineRobustness(unittest.TestCase):
         res = self.pipe.process_frames(decoded_rgb, decoded_rgb)
         e2e_lat = (time.time() - t0) * 1000
 
+        # print the time so it shows up with pytest -s
         print(f"\n[E2E Stream Profile] Ingestion + Decode + Processing Latency: {e2e_lat:.2f}ms")
         self.assertLess(e2e_lat, 15.0)
 

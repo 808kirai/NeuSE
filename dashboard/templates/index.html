@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NeuSE · Edge Telemetry Console</title>
     <style>
+        /* colours used across the page */
         :root {
             --bg: #1B191A;
             --text: #FEFEFE;
@@ -211,7 +212,7 @@
     </div>
 
 <script>
-        // check for telemetry every two seconds
+        // ask the local server for the latest detections and redraw the page
         async function updateTelemetry() {
             try {
                 const res = await fetch('/api/telemetry');
@@ -224,9 +225,11 @@
                 document.getElementById('detection-count').textContent = json.total || 0;
                 document.getElementById('system-status').textContent = 'Local node online';
 
+                // clear the old rows before drawing new ones
                 const body = document.getElementById('telemetry-body');
                 body.replaceChildren();
 
+                // show a message when nothing has been logged
                 if (!json.data || json.data.length === 0) {
                     const row = body.insertRow();
                     const cell = row.insertCell();
@@ -237,8 +240,10 @@
                 }
 
                 // use textContent so saved values are never treated as html
+                // format a number or show a dash when it is missing
                 const fmt = (value, digits) => typeof value === 'number' ? value.toFixed(digits) : '—';
                 for (const item of json.data) {
+                    // the baseline has no confidence score so say so
                     const conf = typeof item.confidence === 'number'
                         ? (item.confidence * 100).toFixed(1) + '%'
                         : 'n/a (baseline)';
@@ -255,11 +260,13 @@
                     }
                 }
             } catch (err) {
+                // the server could not be reached so show the unit as offline
                 console.error("Dashboard telemetry error:", err);
                 document.getElementById('system-status').innerText = 'Offline / Waiting';
             }
         }
 
+        // refresh every two seconds and once right away
         setInterval(updateTelemetry, 2000);
         updateTelemetry();
     </script>

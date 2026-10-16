@@ -6,6 +6,7 @@ project_root = Path(__file__).resolve().parent.parent
 
 
 # shared settings for the pipeline, logger and dashboard
+# values are read when used, so tests can swap them safely
 class config:
     # lowest score a trained model needs to report a detection
     # the classical baseline has no scores so it skips this check
@@ -23,4 +24,5 @@ class config:
     default_lon = 36.817223
 
     # database shared by the pipeline and dashboard
+    # set NEUSE_DB to point it at a different file
     db_path = Path(os.environ.get("NEUSE_DB", project_root / "neuse_local.db"))

@@ -7,6 +7,7 @@ import pytest
 
 from src.pipeline import dual_spectral_pipeline
 
+# the dashboard is a script, not a package, so it is loaded by file path
 app_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "app.py")
 
 
@@ -19,6 +20,7 @@ def load_dashboard():
 
 
 def log_one_detection():
+    """run the real pipeline on a frame with one warm area"""
     pipe = dual_spectral_pipeline()
     frame = np.zeros((480, 640), dtype=np.uint8)
     cv2.rectangle(frame, (200, 150), (260, 250), 255, -1)
@@ -27,6 +29,7 @@ def log_one_detection():
 
 
 def test_empty_database_reports_nothing_measured():
+    """with no detections the api shows empty values instead of made up ones"""
     client = load_dashboard().app.test_client()
     body = client.get("/api/telemetry").get_json()
     assert body["total"] == 0
@@ -36,6 +39,7 @@ def test_empty_database_reports_nothing_measured():
 
 
 def test_telemetry_reports_pipeline_output():
+    """the api returns exactly what the pipeline saved"""
     pipe = log_one_detection()
     client = load_dashboard().app.test_client()
 
@@ -47,6 +51,7 @@ def test_telemetry_reports_pipeline_output():
 
 
 def test_starting_dashboard_keeps_existing_detections():
+    """restarting the dashboard must never wipe saved detections"""
     log_one_detection()
     load_dashboard()
     client = load_dashboard().app.test_client()

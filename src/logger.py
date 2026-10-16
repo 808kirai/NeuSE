@@ -24,14 +24,19 @@ new_columns = {"detector": "text", "latency_ms": "real"}
 
 def connect():
     # open the shared database
+    # callers wrap it in closing so the file is released, which matters on windows
     return sqlite3.connect(config.db_path)
 
 
+# saves detections to the local database so nothing is lost while offline
 class data_logger:
     def __init__(self):
         # create the table or upgrade an older one
+        # closing releases the file and the inner with commits the changes
         with closing(connect()) as conn, conn:
             conn.execute(schema)
+
+            # add any column an older table is missing
             existing = {row[1] for row in conn.execute("pragma table_info(detections)")}
             for name, kind in new_columns.items():
                 if name not in existing:
@@ -39,6 +44,7 @@ class data_logger:
 
     def log_events(self, hits, latency_ms):
         # save all detections from one frame in one go
+        # every detection in a frame shares the same time, position and processing time
         ts = datetime.now().isoformat(timespec="seconds")
         rows = [
             (ts, config.default_lat, config.default_lon, hit["confidence"],
