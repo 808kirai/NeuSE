@@ -1,21 +1,28 @@
-MIT License
+Copyright (c) 2026 Rooney James (github.com/808kirai). All rights reserved.
 
-Copyright (c) 2026
+NeuSE, including its source code, documentation, models, data, images and
+all other files in this repository (the "Software"), is proprietary.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+No licence or permission is granted to any person to use, copy, modify,
+merge, publish, distribute, sublicense, sell, host, deploy, run, or create
+derivative works of the Software, in whole or in part, for any purpose,
+commercial or non-commercial, including training machine learning models.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The Software is visible publicly for viewing only. Viewing it does not grant
+any rights, except as stated below and the minimum required by the GitHub Terms of
+Service: viewing the repository and forking it on GitHub. A fork grants no
+right to use, run, modify or redistribute the Software.
+
+Prospective employers and recruiters may view, clone and run the Software
+privately, solely to evaluate the author's skills for hiring purposes. This
+permission ends when the evaluation ends and does not allow any other use.
+
+Third-party components included in the Software (such as fonts or libraries)
+remain under their own licences.
+
+To ask for permission, contact runiejames@gmail.com. Permission is only valid
+if given in writing.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.

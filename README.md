@@ -75,4 +75,4 @@ Every frame is timed, and the time is saved with its detections. The dashboard s
 
 License
 
-MIT. See `LICENSE`.
+All rights reserved. The code may not be used, copied, modified or distributed without written permission. See `LICENSE`.
