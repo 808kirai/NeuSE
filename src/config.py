@@ -5,6 +5,16 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 
 
+def parse_range(text):
+    # reads "low,high" into a pair of floats, or None when unset
+    if not text:
+        return None
+    low, high = (float(v) for v in text.split(","))
+    if high <= low:
+        raise ValueError("NEUSE_SENSOR_RANGE needs low,high with high above low")
+    return low, high
+
+
 # shared settings for the pipeline, logger and dashboard
 # values are read when used, so tests can swap them safely
 class config:
@@ -18,6 +28,11 @@ class config:
     # warm areas outside this pixel range are treated as noise
     min_blob_area = 100
     max_blob_area = 50000
+
+    # fixed scale for 16 bit or float frames as low,high in the camera's own units
+    # unset means each frame is scaled to its own range, so the warmest patch of a cold empty scene can look hot
+    # e.g. NEUSE_SENSOR_RANGE=27315,31315 for a camera reporting hundredths of a kelvin covers 0 to 40 c
+    sensor_range = parse_range(os.environ.get("NEUSE_SENSOR_RANGE"))
 
     # fixed unit position until a gps feed is added
     default_lat = -1.286389
