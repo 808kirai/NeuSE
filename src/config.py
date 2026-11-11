@@ -25,7 +25,7 @@ class config:
     # pixels brighter than this after contrast boost count as warm
     thermal_threshold = 200
 
-    # warm areas outside this pixel range are treated as noise
+    # warm areas outside this size in pixels are treated as noise
     min_blob_area = 100
     max_blob_area = 50000
 
