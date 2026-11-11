@@ -107,12 +107,16 @@ class dual_spectral_pipeline:
             return gray
 
         # scale 16 bit or float sensor data to 0 to 255
-        gray = np.nan_to_num(gray.astype(np.float32))
-        low, high = gray.min(), gray.max()
+        gray = np.nan_to_num(gray.astype(np.float32), posinf=0.0, neginf=0.0)
+        # take the range from a median filtered copy so one dead pixel cannot set it
+        # without this a single stuck hot pixel squashes a real person below the threshold
+        smooth = cv2.medianBlur(gray, 3)
+        low, high = float(smooth.min()), float(smooth.max())
         # a completely flat frame has no warm areas
-        if high == low:
+        if high <= low:
             return np.zeros(gray.shape, dtype=np.uint8)
-        return ((gray - low) * (255 / (high - low))).astype(np.uint8)
+        scaled = (gray - low) * (255 / (high - low))
+        return np.clip(scaled, 0, 255).astype(np.uint8)
 
 
 # keeps older callers working

@@ -55,6 +55,15 @@ def test_non_uint8_and_single_channel_thermal(pipeline, frame):
     assert len(pipeline.process_frames(thermal_frame=frame)) == 1
 
 
+@pytest.mark.parametrize("dead_value", [65535, np.inf])
+def test_dead_pixel_does_not_hide_target(pipeline, dead_value):
+    """one stuck hot pixel used to set the scale and push a real person below the threshold"""
+    dtype = np.uint16 if dead_value == 65535 else np.float32
+    frame = np.full((480, 640), 7000, dtype=dtype)
+    cv2.rectangle(frame, (200, 150), (260, 250), 9000, -1)
+    frame[5, 5] = dead_value
+    assert len(pipeline.process_frames(thermal_frame=frame)) == 1
+
 def test_latency_is_measured(pipeline):
     """every frame gets a real processing time"""
     pipeline.process_frames(thermal_frame=thermal_with_target())
