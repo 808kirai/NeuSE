@@ -111,7 +111,8 @@ def test_detection_is_logged_with_configured_position(pipeline, isolated_db):
     assert row["latitude"] == config.default_lat
     assert row["longitude"] == config.default_lon
     # full date and time so detections from different days stay apart
-    datetime.fromisoformat(row["timestamp"])
+    # the utc offset is saved so logs from different units can be merged
+    assert datetime.fromisoformat(row["timestamp"]).tzinfo is not None
     assert row["confidence"] is None
     assert row["detector"] == detector_name
     assert row["latency_ms"] == pytest.approx(pipeline.last_latency_ms)
