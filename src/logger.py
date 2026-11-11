@@ -45,7 +45,8 @@ class data_logger:
     def log_events(self, hits, latency_ms):
         # save all detections from one frame in one go
         # every detection in a frame shares the same time, position and processing time
-        ts = datetime.now().isoformat(timespec="seconds")
+        # local time with its utc offset so logs from units in other time zones line up
+        ts = datetime.now().astimezone().isoformat(timespec="seconds")
         rows = [
             (ts, config.default_lat, config.default_lon, hit["confidence"],
              hit["thermal_peak"], str(hit["bbox"]), hit["detector"], latency_ms)
