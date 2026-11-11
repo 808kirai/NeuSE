@@ -108,6 +108,13 @@ class dual_spectral_pipeline:
 
         # scale 16 bit or float sensor data to 0 to 255
         gray = np.nan_to_num(gray.astype(np.float32), posinf=0.0, neginf=0.0)
+
+        # a fixed range keeps a cold scene dark instead of stretching it
+        if config.sensor_range is not None:
+            low, high = config.sensor_range
+            scaled = (gray - low) * (255 / (high - low))
+            return np.clip(scaled, 0, 255).astype(np.uint8)
+
         # take the range from a median filtered copy so one dead pixel cannot set it
         # without this a single stuck hot pixel squashes a real person below the threshold
         smooth = cv2.medianBlur(gray, 3)

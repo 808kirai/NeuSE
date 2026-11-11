@@ -68,6 +68,7 @@ Settings
 - `NEUSE_HOST` - Defaults to `127.0.0.1`, set to `0.0.0.0` to open the dashboard to other devices
 - `NEUSE_PORT` - Dashboard port, defaults to `5000`
 - `NEUSE_DEBUG` - Off by default, set to `1` for Flask debug mode on a trusted dev machine only
+- `NEUSE_SENSOR_RANGE` - Fixed `low,high` scale for 16 bit or float frames, in the camera's own units. Unset, each frame is scaled to its own range, which can make the warmest patch of a cold empty scene look hot. For a camera reporting hundredths of a kelvin, `27315,31315` covers 0 to 40 C
 
 Performance
 

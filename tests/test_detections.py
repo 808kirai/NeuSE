@@ -64,6 +64,36 @@ def test_dead_pixel_does_not_hide_target(pipeline, dead_value):
     frame[5, 5] = dead_value
     assert len(pipeline.process_frames(thermal_frame=frame)) == 1
 
+
+def cold_scene_with_faint_patch():
+    """16 bit frame of cold ground with a patch only slightly warmer, and no person"""
+    rng = np.random.default_rng(0)
+    frame = (7000 + rng.integers(0, 10, (480, 640))).astype(np.uint16)
+    cv2.circle(frame, (320, 240), 20, 7030, -1)
+    return frame
+
+
+def test_fixed_sensor_range_keeps_cold_scene_dark(pipeline, monkeypatch):
+    """scaling each frame to its own range turns the faint patch into a false hit"""
+    frame = cold_scene_with_faint_patch()
+    assert len(pipeline.process_frames(thermal_frame=frame)) == 1
+
+    monkeypatch.setattr(config, "sensor_range", (6000, 10000))
+    assert pipeline.process_frames(thermal_frame=frame) == []
+
+    # a real warm body still shows up on the fixed scale
+    cv2.circle(frame, (100, 100), 20, 9800, -1)
+    assert len(pipeline.process_frames(thermal_frame=frame)) == 1
+
+
+def test_sensor_range_setting_is_checked():
+    from src.config import parse_range
+    assert parse_range("") is None
+    assert parse_range("27315,31315") == (27315.0, 31315.0)
+    with pytest.raises(ValueError):
+        parse_range("5,5")
+
+
 def test_latency_is_measured(pipeline):
     """every frame gets a real processing time"""
     pipeline.process_frames(thermal_frame=thermal_with_target())
