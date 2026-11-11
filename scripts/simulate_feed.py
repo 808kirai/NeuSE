@@ -4,6 +4,7 @@ the frames are made up but every number on the dashboard comes from the pipeline
 
 usage
     python scripts/simulate_feed.py --frames 60 --interval 1
+    python scripts/simulate_feed.py --raw16 --dead-pixels 3
 """
 import argparse
 import sys
@@ -34,12 +35,24 @@ def synthetic_thermal_frame(step, rng, height=480, width=640, targets=2):
     return frame
 
 
+def to_raw16(frame, rng, dead_pixels=0):
+    # turns an 8 bit frame into 16 bit counts like a radiometric camera gives
+    # background lands near 7000 and warm bodies near 9000
+    raw = (7000 + frame.astype(np.uint16) * 8).astype(np.uint16)
+    # stuck hot pixels like real sensors have
+    for _ in range(dead_pixels):
+        raw[rng.integers(0, raw.shape[0]), rng.integers(0, raw.shape[1])] = 65535
+    return raw
+
+
 def main():
     # read the command line options
     parser = argparse.ArgumentParser(description="feed generated thermal frames through the pipeline")
     parser.add_argument("--frames", type=int, default=60, help="how many frames to process")
     parser.add_argument("--interval", type=float, default=1.0, help="seconds between frames")
     parser.add_argument("--seed", type=int, default=0, help="random seed for the background noise")
+    parser.add_argument("--raw16", action="store_true", help="send 16 bit frames like a radiometric camera")
+    parser.add_argument("--dead-pixels", type=int, default=0, help="stuck hot pixels per frame, needs --raw16")
     args = parser.parse_args()
 
     # a fixed seed makes every run produce the same frames
@@ -47,8 +60,11 @@ def main():
     pipe = dual_spectral_pipeline()
 
     for step in range(args.frames):
+        frame = synthetic_thermal_frame(step, rng)
+        if args.raw16:
+            frame = to_raw16(frame, rng, args.dead_pixels)
         # only a thermal frame is sent since the baseline ignores rgb
-        hits = pipe.process_frames(thermal_frame=synthetic_thermal_frame(step, rng))
+        hits = pipe.process_frames(thermal_frame=frame)
         print(f"frame {step + 1}/{args.frames}  {len(hits)} detections in {pipe.last_latency_ms:.2f}ms")
         # wait so the dashboard updates at a readable pace
         time.sleep(args.interval)
