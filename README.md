@@ -19,7 +19,8 @@ Working now
 - Safe handling of missing, empty, 16 bit, float and odd shaped frames
 - A local detection log, with the measured processing time of every frame
 - Store and forward sync. Detections queue on the unit and go to the command center whenever a link is up, newest first, with nothing lost or doubled when the link drops
-- A command center that receives detections from many units, with a live map page for coordinators showing every unit, whether it is online, its backlog and the people it has found
+- A command center that receives detections from many units, with a live map page for coordinators showing every unit, whether it is online, its backlog and its sightings of people
+- Situation reports for coordinators in plain words, written from a template with no network needed, or by a language model when one is set up
 - A demo that flies several units at once on search patterns, with real thermal frames and random link drops
 - A local dashboard showing logged detections and how many still wait to be sent
 - Scoring against the real person labels of the HIT-UAV thermal drone dataset
@@ -32,7 +33,6 @@ Planned
 - On-device inference with MindSpore Lite
 - Using the RGB camera to confirm thermal hits and cut false alarms
 - Running the command center on Huawei Cloud ECS with an RDS database
-- A map and plain language situation reports for coordinators
 - Live GPS, in place of the configured or simulated position units use today
 - Map tiles from Huawei Map Kit or a self hosted server for real deployments. The page uses the public OpenStreetMap tiles today, which need internet and are meant for light use
 
@@ -87,9 +87,21 @@ Every detection gets a unique id and the name of its unit when it is logged. It 
 
 The coordinator page
 
-Open the command center address in a browser. It asks for the token, then shows a map with every unit and every person found, coloured by how recent they are, and a list of units with their state and backlog. It refreshes every 5 seconds and catches up on backlogs in the order they arrive, so detections sent late after an outage still appear.
+Open the command center address in a browser. It asks for the token, then shows a map with every unit and every sighting of a person, coloured by how recent it is, and a list of units with their state and backlog. It refreshes every 5 seconds and catches up on backlogs in the order they arrive, so detections sent late after an outage still appear.
+
+A sighting is one detection in one frame. The same person seen in ten frames is ten sightings, so the page and the reports count sightings, never people.
 
 Each detection is placed where the unit was when it took the frame. Working out the exact ground position from the camera angle and altitude is not done yet.
+
+Situation reports
+
+The Write report button on the coordinator page, or `/api/v1/report?minutes=30`, gives a short summary for the chosen window. It covers which units are online, which have gone silent with sightings still waiting to send, and the areas where people were seen. Each area lists its position, sightings, the units involved, how recent it is, the highest confidence and the nearest unit.
+
+- Sightings within 100 m of each other count as one area
+- The facts are worked out from the database and always come back with the text, so a coordinator can check them
+- With no language model set up, a template writes the report, so it works with no internet
+- With `NEUSE_LLM_URL`, `NEUSE_LLM_KEY` and `NEUSE_LLM_MODEL` set, an OpenAI style chat API writes it instead, such as a model on Huawei Cloud. It is told to use only the facts given and never to turn sightings into a head count. If it fails or answers badly, the template is used and the report says so
+- Reports are only written when asked for, so a language model is not called on every refresh
 
 Layout
 
@@ -101,7 +113,7 @@ Layout
 - `src/metrics.py` - Precision, recall and mAP against labelled boxes
 - `src/hit_uav.py` - Reads the HIT-UAV labels
 - `dashboard/` - Local web dashboard
-- `command_center/` - Command center API that units sync to, and the coordinator map page
+- `command_center/` - Command center API that units sync to, the coordinator map page and situation reports
 - `scripts/simulate_feed.py` - Sends made up or real thermal frames through the pipeline for demos
 - `scripts/demo_units.py` - Flies several demo units at once against a command center
 - `scripts/evaluate_hit_uav.py` - Scores a detector on HIT-UAV
@@ -197,6 +209,7 @@ Settings
 - `NEUSE_SYNC_TOKEN` - Secret the unit sends to the command center
 - `NEUSE_CC_TOKEN` - Secret the command center requires. Unset, it accepts anyone, which is only fine on a closed test network
 - `NEUSE_CC_DB` - Command center database, defaults to `command_center.db` in the project folder
+- `NEUSE_LLM_URL`, `NEUSE_LLM_KEY` and `NEUSE_LLM_MODEL` - Optional OpenAI style chat API for situation reports, the base address ending before `/chat/completions`. Unset, reports come from the template
 - `NEUSE_CC_HOST` and `NEUSE_CC_PORT` - Command center address, defaults to `127.0.0.1` and `8000`
 - `NEUSE_HOST` - Defaults to `127.0.0.1`, set to `0.0.0.0` to open the dashboard to other devices
 - `NEUSE_PORT` - Dashboard port, defaults to `5000`
