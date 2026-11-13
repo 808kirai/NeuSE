@@ -18,7 +18,9 @@ Working now
 - The first warm spot baseline, kept for comparison
 - Safe handling of missing, empty, 16 bit, float and odd shaped frames
 - A local detection log, with the measured processing time of every frame
-- A local dashboard showing logged detections
+- Store and forward sync. Detections queue on the unit and go to the command center whenever a link is up, newest first, with nothing lost or doubled when the link drops
+- A first command center API that receives detections from many units and summarises each unit
+- A local dashboard showing logged detections and how many still wait to be sent
 - Scoring against the real person labels of the HIT-UAV thermal drone dataset
 - A script that prepares HIT-UAV for MindYOLO training, with person labels only
 - Automated tests
@@ -28,7 +30,8 @@ Planned
 - A person detector trained with MindYOLO on Huawei Cloud ModelArts, using the HIT-UAV thermal dataset
 - On-device inference with MindSpore Lite
 - Using the RGB camera to confirm thermal hits and cut false alarms
-- Syncing detections to a command center on Huawei Cloud
+- Running the command center on Huawei Cloud ECS with an RDS database
+- A map and plain language situation reports for coordinators
 - Live GPS, in place of the fixed position each unit uses today
 
 How detection works
@@ -68,15 +71,28 @@ The HIT-UAV paper reports person AP@0.5 on the same test images for well known d
 
 The person check beats YOLOv4-tiny, the small model meant for limited hardware, but not the full sized GPU models. Those are the bar for the MindYOLO detector.
 
+How sync works
+
+Every detection gets a unique id and the name of its unit when it is logged. It stays marked as waiting in the unit's own database until the command center confirms it.
+
+- `python -m src.sync` checks every 5 seconds and sends waiting detections in batches of 100, newest first, so coordinators see the current picture as soon as a link returns
+- Batches are compressed, since field links can be slow and paid by the megabyte
+- When the command center cannot be reached, the unit keeps detecting and waits longer between tries, doubling up to 5 minutes with a little randomness so many units do not retry at once
+- If a reply gets lost, sending the batch again is safe. The command center keeps each id once
+- The command center checks every detection. One it refuses is kept on the unit with the reason and not sent again, so a bad row cannot block the queue
+- With a token set, the command center refuses any request without it, since detections show where people are
+
 Layout
 
 - `src/pipeline.py` - Thermal detection, choosing between the person check and warm spots
 - `src/person_check.py` - The person check
-- `src/logger.py` - Local detection log in SQLite
+- `src/logger.py` - Local detection log in SQLite, which doubles as the queue of detections to send
+- `src/sync.py` - Store and forward sync to the command center
 - `src/config.py` - Detector choice, thresholds, unit position and database location
 - `src/metrics.py` - Precision, recall and mAP against labelled boxes
 - `src/hit_uav.py` - Reads the HIT-UAV labels
 - `dashboard/` - Local web dashboard
+- `command_center/` - Command center API that units sync to
 - `scripts/simulate_feed.py` - Sends made up or real thermal frames through the pipeline for demos
 - `scripts/evaluate_hit_uav.py` - Scores a detector on HIT-UAV
 - `scripts/train_person_check.py` - Trains the person check
@@ -105,6 +121,22 @@ python dashboard/app.py
 ```
 
 To run the pipeline once on a test frame, use `python -m src.pipeline`.
+
+To try store and forward on one computer, use three terminals. Stop and start the command center to watch detections wait and then arrive.
+
+```bash
+# terminal 1: the command center on port 8000
+NEUSE_CC_TOKEN=pick-a-secret python -m command_center.app
+
+# terminal 2: a unit sending what it logs
+NEUSE_SYNC_TOKEN=pick-a-secret python -m src.sync --url http://127.0.0.1:8000
+
+# terminal 3: detections from real thermal frames, see the HIT-UAV steps below
+python scripts/simulate_feed.py --replay ../datasets/hit-uav/normal_json/test --frames 60
+
+# what the command center has, per unit
+curl -H "Authorization: Bearer pick-a-secret" http://127.0.0.1:8000/api/v1/units
+```
 
 To check the results yourself, clone HIT-UAV outside the project. It is about 1.3 GB.
 
@@ -142,6 +174,12 @@ Settings
 
 - `NEUSE_DETECTOR` - `person-check` by default, or `warm-spots` for the first baseline
 - `NEUSE_DB` - Detection database, defaults to `neuse_local.db` in the project folder
+- `NEUSE_UNIT_ID` - Name this unit reports to the command center, defaults to `unit-` and the computer's name
+- `NEUSE_SYNC_URL` - Command center address for `python -m src.sync`
+- `NEUSE_SYNC_TOKEN` - Secret the unit sends to the command center
+- `NEUSE_CC_TOKEN` - Secret the command center requires. Unset, it accepts anyone, which is only fine on a closed test network
+- `NEUSE_CC_DB` - Command center database, defaults to `command_center.db` in the project folder
+- `NEUSE_CC_HOST` and `NEUSE_CC_PORT` - Command center address, defaults to `127.0.0.1` and `8000`
 - `NEUSE_HOST` - Defaults to `127.0.0.1`, set to `0.0.0.0` to open the dashboard to other devices
 - `NEUSE_PORT` - Dashboard port, defaults to `5000`
 - `NEUSE_DEBUG` - Off by default, set to `1` for Flask debug mode on a trusted dev machine only

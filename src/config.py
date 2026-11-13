@@ -1,4 +1,5 @@
 import os
+import socket
 from pathlib import Path
 
 # project root so paths work from any folder
@@ -55,3 +56,17 @@ class config:
     # database shared by the pipeline and dashboard
     # set NEUSE_DB to point it at a different file
     db_path = Path(os.environ.get("NEUSE_DB", project_root / "neuse_local.db"))
+
+    # name this unit reports to the command center, defaults to the computer's name
+    unit_id = os.environ.get("NEUSE_UNIT_ID") or f"unit-{socket.gethostname().lower()}"
+
+    # command center address for store and forward sync, unset keeps everything local
+    # e.g. NEUSE_SYNC_URL=http://203.0.113.10:8000
+    sync_url = os.environ.get("NEUSE_SYNC_URL")
+    # shared secret the command center expects, sent as a bearer token
+    sync_token = os.environ.get("NEUSE_SYNC_TOKEN")
+    # detections sent per request, small enough for a weak satellite or radio link
+    sync_batch = 100
+    # seconds between checks while the link is up, and the longest wait after failures
+    sync_interval = 5.0
+    sync_max_wait = 300.0

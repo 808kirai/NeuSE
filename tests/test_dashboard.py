@@ -45,6 +45,8 @@ def test_telemetry_reports_pipeline_output():
 
     body = client.get("/api/telemetry").get_json()
     assert body["total"] == 1
+    # nothing has been sent to a command center yet
+    assert body["queued"] == 1
     assert body["detector"] == "classical-baseline"
     assert body["avg_latency_ms"] == pytest.approx(pipe.last_latency_ms, abs=0.01)
     assert body["data"][0]["confidence"] is None
