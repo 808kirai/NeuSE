@@ -20,7 +20,8 @@ class dual_spectral_pipeline:
         # writes detections to the local database
         self.logger = data_logger()
         # reuse clahe instead of building it every frame
-        self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        grid = config.clahe_tile_grid
+        self.clahe = cv2.createCLAHE(clipLimit=config.clahe_clip_limit, tileGridSize=(grid, grid))
         # time spent on the last frame in ms
         self.last_latency_ms = None
 
