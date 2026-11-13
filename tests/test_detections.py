@@ -7,7 +7,7 @@ import pytest
 
 from src.config import config
 from src.logger import data_logger
-from src.pipeline import dual_spectral_pipeline, detector_name
+from src.pipeline import thermal_pipeline, detector_name
 
 
 def thermal_with_target(dtype=np.uint8, peak=255):
@@ -27,7 +27,7 @@ def stored_rows(db):
 @pytest.fixture
 def pipeline():
     """fresh pipeline for each test"""
-    return dual_spectral_pipeline()
+    return thermal_pipeline()
 
 
 def test_baseline_reports_no_confidence(pipeline):
@@ -163,6 +163,53 @@ def test_person_touching_the_frame_edge_is_found(pipeline, x, y):
 def test_contrast_settings_come_from_config(monkeypatch):
     monkeypatch.setattr(config, "clahe_clip_limit", 3.5)
     monkeypatch.setattr(config, "clahe_tile_grid", 4)
-    pipe = dual_spectral_pipeline()
+    pipe = thermal_pipeline()
     assert pipe.clahe.getClipLimit() == 3.5
     assert pipe.clahe.getTilesGridSize() == (4, 4)
+
+
+def test_a_database_error_does_not_stop_detection(pipeline, isolated_db, monkeypatch):
+    """a full disk or a locked file used to raise out of process_frames and stop the unit"""
+    real = pipeline.logger.log_events
+    calls = []
+
+    def failing_once(*args):
+        calls.append(args)
+        if len(calls) == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return real(*args)
+
+    monkeypatch.setattr(pipeline.logger, "log_events", failing_once)
+    assert len(pipeline.process_frames(thermal_frame=thermal_with_target())) == 1
+    # nothing saved yet, the detection is held in memory
+    assert stored_rows(isolated_db) == [] and len(pipeline.unsaved) == 1
+
+    # the next frame saves both, each with its own frame's time
+    pipeline.process_frames(thermal_frame=thermal_with_target())
+    assert len(stored_rows(isolated_db)) == 2 and pipeline.unsaved == []
+
+
+def test_a_failed_status_note_does_not_stop_detection(pipeline, monkeypatch):
+    def broken(*args):
+        raise sqlite3.OperationalError("disk full")
+
+    monkeypatch.setattr(pipeline.logger, "note_status", broken)
+    assert len(pipeline.process_frames(thermal_frame=thermal_with_target())) == 1
+
+
+def test_held_detections_are_capped(pipeline, monkeypatch):
+    import src.pipeline as module
+
+    def broken(*args):
+        raise sqlite3.OperationalError("disk full")
+
+    monkeypatch.setattr(pipeline.logger, "log_events", broken)
+    monkeypatch.setattr(module, "max_unsaved", 3)
+    for _ in range(6):
+        pipeline.process_frames(thermal_frame=thermal_with_target())
+    assert len(pipeline.unsaved) == 3
+
+
+def test_old_class_name_still_works():
+    from src.pipeline import dual_spectral_pipeline, thermal_pipeline
+    assert dual_spectral_pipeline is thermal_pipeline

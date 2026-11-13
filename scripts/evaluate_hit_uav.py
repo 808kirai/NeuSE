@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.config import config
 from src.hit_uav import load_split
 from src.metrics import add_counts, average_precision, match_image, summarize
-from src.pipeline import detectors, dual_spectral_pipeline
+from src.pipeline import detectors, thermal_pipeline
 
 rules = ("iou", "center")
 groups = ("all", "day", "night", "60-80 m", "90-110 m", "120-130 m")
@@ -58,7 +58,7 @@ def make_detector(name=None):
     # returns a function that takes an 8 bit frame and gives back (box, score) pairs
     # plus the score a hit needs to count, None when every hit counts
     # a trained model plugs in here later with the same shape, so the scoring stays the same
-    pipe = dual_spectral_pipeline(name)
+    pipe = thermal_pipeline(name)
 
     def detect(frame):
         # calls the detector directly so the database is left alone

@@ -8,13 +8,13 @@ import numpy as np
 # add the project root to the python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.pipeline import dual_spectral_pipeline, VisionPipeline
+from src.pipeline import thermal_pipeline, VisionPipeline
 
 
 @pytest.fixture
 def pipeline():
     """create a pipeline for each test"""
-    return dual_spectral_pipeline()
+    return thermal_pipeline()
 
 
 @pytest.fixture
@@ -58,6 +58,8 @@ def test_pipeline_resilience(pipeline, bad_input):
 
 
 # check processing latency
+# speed depends on the computer, so this only runs when asked for with NEUSE_TIMING_TESTS=1
+@pytest.mark.skipif(not os.environ.get("NEUSE_TIMING_TESTS"), reason="timing checks run with NEUSE_TIMING_TESTS=1")
 def test_latency_performance(pipeline):
     """check that frame processing stays within a realistic execution budget"""
     # pure noise is the worst case because it creates many small warm areas

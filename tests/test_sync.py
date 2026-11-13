@@ -13,8 +13,10 @@ from command_center import store
 from command_center.app import create_app, unzip
 from src import sync
 from src.config import config
-from src.logger import data_logger
-from src.pipeline import dual_spectral_pipeline
+from datetime import datetime
+
+from src.logger import data_logger, prune
+from src.pipeline import thermal_pipeline
 
 
 def log_hits(count, start=0):
@@ -77,7 +79,7 @@ def test_old_database_rows_get_ids_and_can_be_sent(isolated_db, center):
 def test_everything_queued_is_sent_and_marked(isolated_db, center):
     log_hits(5)
     result = sync.sync_once(center)
-    assert result == {"synced": 5, "pending": 0, "error": None}
+    assert result == {"synced": 5, "refused": 0, "pending": 0, "error": None}
     assert all(r["synced_at"] for r in rows(isolated_db))
     assert store.count(center.db) == 5
 
@@ -140,7 +142,7 @@ def test_a_command_center_that_takes_nothing_does_not_loop(isolated_db):
     assert result["synced"] == 0 and result["pending"] == 2 and result["error"]
 
 
-def test_rejected_detections_are_kept_but_not_resent(isolated_db):
+def test_refused_detections_are_held_counted_and_not_resent(isolated_db):
     log_hits(2)
     calls = []
 
@@ -148,10 +150,31 @@ def test_rejected_detections_are_kept_but_not_resent(isolated_db):
         calls.append(len(detections))
         return {"accepted": [detections[0]["uid"]], "rejected": {detections[1]["uid"]: "bad box"}}
 
-    assert sync.sync_once(refuse_one)["synced"] == 1
+    first = sync.sync_once(refuse_one)
+    assert first["synced"] == 1 and first["refused"] == 1 and first["pending"] == 0
+    # the refused one is not confirmed, it is held with its reason and left out of the queue
+    assert sync.refused_count() == 1 and sync.refused_reasons() == [("bad box", 1)]
+    held = [r for r in rows(isolated_db) if r["sync_error"]]
+    assert len(held) == 1 and held[0]["synced_at"] is None
     assert sync.sync_once(refuse_one)["synced"] == 0
     assert calls == [2]
-    assert [r["sync_error"] for r in rows(isolated_db)].count("bad box") == 1
+
+
+def test_refused_detections_can_be_retried_once_the_cause_is_fixed(isolated_db, center):
+    log_hits(3)
+    sync.sync_once(lambda detections: {"accepted": [], "rejected": {d["uid"]: "full" for d in detections}})
+    assert sync.refused_count() == 3 and store.count(center.db) == 0
+
+    assert sync.retry_refused() == 3
+    assert sync.sync_once(center)["synced"] == 3
+    assert sync.refused_count() == 0 and store.count(center.db) == 3
+
+
+def test_a_unit_name_the_command_center_would_refuse_stops_the_unit_starting(isolated_db, monkeypatch):
+    # before this check such a unit logged normally, then every detection was refused when sent
+    monkeypatch.setattr(config, "unit_id", "unit 1")
+    with pytest.raises(ValueError, match="unit id"):
+        data_logger()
 
 
 @pytest.mark.parametrize("reply", [None, [], "ok", {"accepted": "all"}, {"accepted": [["x"]]}, {"rejected": ["x"]}])
@@ -180,6 +203,63 @@ def test_waits_double_after_failures_and_reset_after_success(isolated_db, center
 
     sync.run(flaky, interval=5, max_wait=15, stop=lambda: len(waits) >= 5, sleep=sleep, jitter=lambda: 1.0)
     assert waits == [10, 15, 15, 5, 10]
+
+
+def test_retry_wait_never_overflows_however_long_the_outage():
+    # the wait used to be worked out as interval times 2 to the number of failures
+    # which overflowed after 1024 failures in a row, a few days offline, and stopped sync for good
+    for failures in (1, 16, 1024, 5000, 10 ** 6):
+        assert 0 < sync.retry_wait(failures, 5.0, 300.0, 1.0) <= 300.0
+    assert sync.retry_wait(1, 5.0, 300.0, 1.0) == 10.0
+
+
+def test_sync_keeps_going_through_a_very_long_outage(isolated_db, monkeypatch):
+    log_hits(1)
+    # skip the database work so two thousand rounds run in a moment
+    monkeypatch.setattr(sync, "sync_once", lambda send: {"synced": 0, "refused": 0, "pending": 1, "error": "no link"})
+    waits = []
+    sync.run(offline, interval=5, max_wait=300, stop=lambda: len(waits) >= 2000, sleep=waits.append,
+             jitter=lambda: 1.0)
+    assert len(waits) == 2000 and max(waits) == 300.0
+
+
+def test_batches_carry_the_units_clock(monkeypatch):
+    sent = []
+    monkeypatch.setattr(sync, "poster", lambda *args: sent.append)
+    sync.http_sender("http://127.0.0.1:1")([{"uid": "x"}])
+    assert sent[0]["detections"] == [{"uid": "x"}]
+    assert datetime.fromisoformat(sent[0]["sent_at"]).tzinfo is not None
+
+
+def test_token_is_not_sent_over_plain_http_to_another_computer():
+    with pytest.raises(ValueError, match="plain http"):
+        sync.http_sender("http://command.example.org", token="secret")
+    # fine over https, to this computer, with no token, or when the operator allows it
+    sync.http_sender("https://command.example.org", token="secret")
+    sync.http_sender("http://127.0.0.1:8000", token="secret")
+    sync.http_sender("http://command.example.org")
+    sync.http_sender("http://command.example.org", token="secret", insecure=True)
+    with pytest.raises(ValueError):
+        sync.http_sender("ftp://command.example.org")
+
+
+def test_old_confirmed_detections_can_be_pruned(isolated_db, center):
+    log_hits(4)
+
+    def first_batch_only(detections):
+        # two confirmed and one refused, then nothing more is taken
+        if len(detections) < 4:
+            return {"accepted": []}
+        return {"accepted": [detections[0]["uid"], detections[1]["uid"]], "rejected": {detections[2]["uid"]: "bad"}}
+
+    sync.sync_once(first_batch_only)
+    # pretend the two confirmed ones were confirmed 40 days ago
+    with sqlite3.connect(isolated_db) as conn:
+        conn.execute("update detections set synced_at = '2020-01-01T00:00:00+00:00' where synced_at is not null")
+    assert prune(0) == 0
+    assert prune(30) == 2
+    # the waiting one and the refused one are never removed
+    assert sync.pending_count() == 1 and sync.refused_count() == 1
 
 
 # command center
@@ -264,10 +344,10 @@ def test_pipeline_detections_reach_the_command_center_over_http(isolated_db, liv
     monkeypatch.setattr(config, "unit_id", "unit-field-1")
     frame = np.zeros((480, 640), dtype=np.uint8)
     cv2.rectangle(frame, (200, 150), (260, 250), 255, -1)
-    dual_spectral_pipeline().process_frames(thermal_frame=frame)
+    thermal_pipeline().process_frames(thermal_frame=frame)
 
     result = sync.sync_once(sync.http_sender(url, token="secret"))
-    assert result == {"synced": 1, "pending": 0, "error": None}
+    assert result == {"synced": 1, "refused": 0, "pending": 0, "error": None}
     assert store.units(center_db)[0]["unit_id"] == "unit-field-1"
 
 

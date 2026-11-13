@@ -41,7 +41,7 @@ Decision - Train the future detector with MindYOLO on ModelArts, using the HIT-U
 - Daytime is the weak spot, mAP@0.5 0.004 by day against 0.129 at night
 - Built the person only copy of HIT-UAV in MindYOLO format, ready for ModelArts
 
-Reference - The HIT-UAV paper, Suo et al. 2023 table 4, reports person AP@0.5 on the same test images of 89.9% for YOLOv4, 85.6% for SSD-512, 75.5% for Faster R-CNN and 16.9% for YOLOv4-tiny. The small model meant for limited hardware does poorly on people, who are only about 14 by 15 pixels here.
+Reference - The HIT-UAV paper, Suo et al. 2023 table 4, reports person AP@0.5 on the same test images of 89.9% for YOLOv4, 85.6% for SSD-512, 75.5% for Faster R-CNN and 16.9% for YOLOv4-tiny. People are only about 14 by 15 pixels here. The YOLOv4-tiny figure is a poor guide to small detectors, see the entry of 2026-11-14.
 
 Decision - Settings are tuned on the validation images and the test images are scored once, so the test numbers stay fair.
 
@@ -92,7 +92,56 @@ Decision - The page and reports now say sightings, not people found. The same pe
 
 Decision - Reports are written only when a coordinator asks, so a paid language model is not called on every refresh.
 
+2026-11-14 - Code review and fixes
+
+The whole codebase was read for bugs and weak logic, each suspected problem was tested, and every one found was fixed. Nothing was wrong with the headline scores. The same model scores the same on the test images after the fixes, mAP@0.5 0.670 with 79% precision and 65% recall.
+
+Bugs that could lose or hide data
+
+- A detection the command center refused was marked as sent on the unit and never tried again, with no warning. A unit name with a space in it emptied a unit's queue while nothing reached coordinators. Refused detections are now held with the reason, counted on the dashboard and at the command center, and put back with `python -m src.sync --retry-refused`. A unit will not start with a name the command center would refuse
+- The retry wait overflowed after 1,024 failures in a row, a few days offline, and stopped sync. It is capped now
+- Unit clocks were trusted. A detection stamped two hours fast or in 2020 was accepted and then left out of every report. Each batch now carries the unit's clock reading and the command center corrects the times by the difference
+- A unit showed as online whenever its sync program was alive, even if its detector had stopped hours ago. Units now report how long their detector has been quiet and the map shows them as not searching
+- A database write error stopped detection. Hits are now held in memory and saved on a later frame
+
+Outputs that misled
+
+- Sightings were placed at the drone, up to about 225 m from the person at 130 m with a slanted camera. They are now placed on the ground when the unit gives its height, heading and camera tilt, and marked as placed at the unit otherwise
+- Confidence overstated. Hits shown as 0.90 to 0.95 were people 56% of the time, and 27% of reported hits showed 1.00. Confidence is now calibrated on the validation images. On the test images, hits shown as 0.9 or more were people 92% of the time, and the gap is within about 15 points across the range
+- The dashboard's average processing time came from detection rows, so busy frames counted many times and empty frames never. It now averages the last 100 frames
+
+Security
+
+- With no token the command center was open to anyone. It now only answers its own computer until a token is set
+- One shared token let any unit read everything and post as any other. Units can now have their own tokens, which can only send for that unit
+- The unit no longer sends a token over plain HTTP to another computer unless told to
+- Six kinds of bad input made the server answer 500. They now get a plain refusal
+
+Evaluation
+
+- Every HIT-UAV test image is within 30 frame numbers of a training image from the same flight, and 84% are within 5, so the test score is for scenes the detector has seen
+- New score on unseen flights - the 105 flight settings were dealt into 5 parts and each part scored by a detector trained without it. Mean mAP@0.5 0.520, from 0.487 to 0.569, with 63% precision, 54% recall and 1.4 false hits per image
+- Of 3,630 bicycle boxes in the training images, 3 have a person box on them. The dataset does not label riders as people, so the person check and the prepared MindYOLO data treat them as background. `prepare_hit_uav.py --with-bicycles` keeps bicycles as a second class
+- The comparison with YOLOv4-tiny was overstated. Its 16.9% is one weak run, far below its own 83.6% on cars, and is not what small detectors are limited to. The README now says so
+- The worst test frames of the warm spot baseline were looked at before the person check was designed. The numbers were scored once after tuning, but the test images were not fully unseen. The README says so
+
+Demo and deployment
+
+- The coordinator page loaded its map library from another site and stopped working without it. The library is now served by the command center, and the page keeps its lists when the map background cannot load
+- The command center runs on the waitress web server, not Flask's development one
+- The licence now lets the competition committee and judges run and reproduce the code
+- The two speed checks in the tests only run when asked for, so a slow computer does not fail the suite
+- Smaller fixes - an explicit arrival number for map paging, a setting to prune old confirmed detections, a warning when the database sits in a OneDrive folder, one name per detector everywhere, and `thermal_pipeline` as the honest name of the pipeline class, with the old name kept working
+
+Decision - Refused detections are held, not dropped and not resent on their own. Resending them blindly would block the queue, and dropping them would hide a fault.
+
+Decision - Clock correction uses the gap between the unit's clock and the command center's at the moment of sending. It cannot fix sightings logged before a unit's clock was put right mid flight.
+
+Decision - The default camera view angles of 45 by 37 degrees are a guess, since HIT-UAV does not publish them. Ground positions in the demo are estimates until a real camera's values are set.
+
+Known limits - No HTTPS is built in, the command center needs a reverse proxy in front of it. The person check is tied to 640 by 512 frames from 60 to 130 m. Time per image on test footage is about 30 ms, and over 100 ms on a frame crowded with warm spots.
+
 Next
 
-- Command center on Huawei Cloud ECS with RDS
+- Command center on Huawei Cloud ECS with RDS, behind HTTPS
 - MindYOLO training on ModelArts once access is ready, then MindSpore Lite on the unit

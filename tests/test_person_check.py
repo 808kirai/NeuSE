@@ -13,7 +13,7 @@ from src.hit_uav import splits
 from src.metrics import iou
 from src.person_check import (feature_count, find_candidates, frame_features, person_check, shrink,
                               suppress_overlaps)
-from src.pipeline import dual_spectral_pipeline, person_check_name
+from src.pipeline import person_check_name, thermal_pipeline
 
 
 def drone_frame(seed=0):
@@ -94,7 +94,7 @@ def test_saved_weights_load_and_score():
 
 
 def test_pipeline_runs_the_person_check():
-    pipe = dual_spectral_pipeline("person-check")
+    pipe = thermal_pipeline("person-check")
     assert pipe.checker is not None
     # min_score 0 keeps every candidate so there is something to check
     hits = pipe._detect(drone_frame(), min_score=0.0)
@@ -107,12 +107,12 @@ def test_pipeline_runs_the_person_check():
 
 
 def test_person_check_gives_the_same_answer_twice():
-    pipe = dual_spectral_pipeline("person-check")
+    pipe = thermal_pipeline("person-check")
     assert pipe._detect(drone_frame(), 0.0) == pipe._detect(drone_frame(), 0.0)
 
 
 def test_person_check_handles_bad_frames():
-    pipe = dual_spectral_pipeline("person-check")
+    pipe = thermal_pipeline("person-check")
     for bad in (None, np.array([]), np.zeros((10, 10, 4), np.uint8)):
         assert pipe.process_frames(thermal_frame=bad) == []
     assert pipe.process_frames(thermal_frame=np.zeros((512, 640), np.uint16)) == []
@@ -120,17 +120,17 @@ def test_person_check_handles_bad_frames():
 
 def test_missing_weights_fall_back_to_warm_spots(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "person_check_path", tmp_path / "missing.npz")
-    assert dual_spectral_pipeline("person-check").detector == "warm-spots"
+    assert thermal_pipeline("person-check").detector == "warm-spots"
 
 
 def test_unknown_detector_is_refused():
     with pytest.raises(ValueError):
-        dual_spectral_pipeline("yolo")
+        thermal_pipeline("yolo")
 
 
 def test_configured_detector_is_used(monkeypatch):
     monkeypatch.setattr(config, "detector", "person-check")
-    assert dual_spectral_pipeline().detector == "person-check"
+    assert thermal_pipeline().detector == "person-check"
 
 
 def make_dataset(root):
@@ -160,3 +160,68 @@ def test_training_writes_usable_weights(tmp_path):
     checker = person_check(out)
     assert checker.threshold == pytest.approx(threshold)
     assert isinstance(checker.detect(drone_frame()), list)
+
+
+def test_scores_are_calibrated_chances():
+    checker = person_check(config.person_check_path)
+    # the saved weights carry the calibration fitted on the validation images
+    assert checker.scale > 0 and (checker.scale, checker.shift) != (1.0, 0.0)
+    features, _ = frame_features(drone_frame())
+    scores = checker.scores(features)
+    assert ((scores >= 0) & (scores <= 1)).all()
+    # calibration keeps the order of the scores, so the ranking and the map score do not change
+    plain = checker.scores.__func__
+    checker.scale, checker.shift = 1.0, 0.0
+    assert (np.argsort(plain(checker, features)) == np.argsort(scores)).all()
+
+
+def test_weights_for_other_features_are_refused(tmp_path):
+    weights = dict(np.load(config.person_check_path))
+    weights["mean"] = weights["mean"][:-1]
+    np.savez(tmp_path / "old.npz", **weights)
+    with pytest.raises(ValueError, match="does not match"):
+        person_check(tmp_path / "old.npz")
+
+
+def test_weights_without_calibration_still_load(tmp_path):
+    weights = {k: v for k, v in np.load(config.person_check_path).items() if k not in ("scale", "shift")}
+    np.savez(tmp_path / "plain.npz", **weights)
+    checker = person_check(tmp_path / "plain.npz")
+    assert (checker.scale, checker.shift) == (1.0, 0.0)
+
+
+def test_a_noisy_frame_is_capped_to_the_warmest_candidates():
+    noise = np.random.default_rng(3).integers(0, 255, (512, 640), dtype=np.uint8)
+    everything, _ = frame_features(noise)
+    capped, boxes = frame_features(noise, limit=50)
+    assert len(everything) > 50 and capped.shape == (50, feature_count) and len(boxes) == 50
+    # a frame under the cap is left alone
+    assert len(frame_features(drone_frame(), limit=50)[1]) == 3
+
+
+def test_frame_scale_brings_a_bigger_picture_down_to_the_trained_size(monkeypatch):
+    small = drone_frame()
+    # the same scene from a camera with twice the detail, where people look twice as big
+    big = cv2.resize(small, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
+    expected = thermal_pipeline("person-check")._detect(small, min_score=0.0)
+
+    monkeypatch.setattr(config, "frame_scale", 0.5)
+    hits = thermal_pipeline("person-check")._detect(big, min_score=0.0)
+    assert len(hits) == len(expected) > 0
+    for hit, same in zip(hits, expected):
+        # boxes come back in the big frame's own pixels
+        assert hit["bbox"] == pytest.approx([2 * v for v in same["bbox"]], abs=2)
+        assert hit["confidence"] == pytest.approx(same["confidence"], abs=1e-6)
+
+
+def test_person_check_warns_once_about_an_unexpected_frame_size(caplog):
+    pipe = thermal_pipeline("person-check")
+    with caplog.at_level("WARNING"):
+        pipe._detect(np.zeros((480, 640), np.uint8))
+        pipe._detect(np.zeros((480, 640), np.uint8))
+    assert sum("trained on 640 by 512" in r.message for r in caplog.records) == 1
+
+
+def test_confidence_is_not_rounded_away():
+    hits = thermal_pipeline("person-check")._detect(drone_frame(), min_score=0.0)
+    assert all(isinstance(h["confidence"], float) for h in hits)

@@ -55,11 +55,16 @@ def find_candidates(gray):
     return keep, contrast
 
 
-def frame_features(gray):
+def frame_features(gray, limit=None):
     # returns one feature row and one box per candidate in the frame
+    # limit keeps only the warmest candidates, so a frame full of noise cannot stall the unit
     candidates, contrast = find_candidates(gray)
     if not candidates:
         return np.zeros((0, feature_count), np.float32), []
+    if limit and len(candidates) > limit:
+        peaks = [float(contrast[y:y + h, x:x + w].max()) for (x, y, w, h, _), _ in candidates]
+        warmest = sorted(range(len(candidates)), key=lambda i: -peaks[i])[:limit]
+        candidates = [candidates[i] for i in sorted(warmest)]
 
     # gradients once per frame, padded so patches at the edge stay full size
     padded = cv2.copyMakeBorder(gray, patch_size, patch_size, patch_size, patch_size,
@@ -138,9 +143,34 @@ def suppress_overlaps(detections, overlap):
     return kept
 
 
+def raw_scores(features, mean, std, w1, b1, w2, b2):
+    # the network's output for each candidate before it is turned into a chance
+    z = (features - mean) / std
+    hidden = np.maximum(z @ w1 + b1, 0)
+    return (hidden @ w2 + b2).ravel()
+
+
+def to_chance(raw, scale, shift):
+    # turns the network's output into a chance from 0 to 1
+    # scale and shift are fitted on the validation images so the chance matches how often such hits are people
+    return 1 / (1 + np.exp(-np.clip(scale * raw.astype(np.float64) + shift, -30, 30)))
+
+
+def fitted_boxes(features, boxes, mean, std, box_weights):
+    # moves and resizes each spot box to the person around it
+    z = (features - mean) / std
+    shift = np.hstack([z, np.ones((len(z), 1), np.float32)]) @ box_weights
+    fitted = []
+    for (x, y, w, h), (dx, dy, log_w, log_h) in zip(boxes, shift):
+        new_w, new_h = float(np.exp(log_w)), float(np.exp(log_h))
+        cx, cy = x + w / 2 + dx, y + h / 2 + dy
+        fitted.append([cx - new_w / 2, cy - new_h / 2, new_w, new_h])
+    return fitted
+
+
 # loads the trained weights and finds people in 8 bit thermal frames
 class person_check:
-    def __init__(self, path):
+    def __init__(self, path, limit=None):
         weights = np.load(Path(path))
         self.mean, self.std = weights["mean"], weights["std"]
         self.w1, self.b1 = weights["w1"], weights["b1"]
@@ -148,29 +178,32 @@ class person_check:
         self.box_weights = weights["box_weights"]
         self.threshold = float(weights["threshold"])
         self.overlap = float(weights["overlap"])
+        # turns the network's raw output into a chance that matches how often such hits are right
+        # older weight files have none, so their scores are used as they are
+        self.scale = float(weights["scale"]) if "scale" in weights else 1.0
+        self.shift = float(weights["shift"]) if "shift" in weights else 0.0
+        # most candidates scored per frame, None scores them all
+        self.limit = limit
+
+        # weights made for a different set of features would give nonsense, so refuse them
+        if self.mean.shape != (feature_count,) or self.w1.shape[0] != feature_count:
+            raise ValueError(f"{path} does not match this version of the person check, "
+                             "run scripts/train_person_check.py to make it again")
 
     def scores(self, features):
         # chance each candidate is a person, 0 to 1
-        z = (features - self.mean) / self.std
-        hidden = np.maximum(z @ self.w1 + self.b1, 0)
-        logit = np.clip(hidden @ self.w2 + self.b2, -30, 30)
-        return (1 / (1 + np.exp(-logit))).ravel()
+        # calibrated on the validation images, so 0.8 means about 8 in 10 such hits were people there
+        raw = raw_scores(features, self.mean, self.std, self.w1, self.b1, self.w2, self.b2)
+        return to_chance(raw, self.scale, self.shift)
 
     def fit_boxes(self, features, boxes):
         # moves and resizes each spot box to the person around it
-        z = (features - self.mean) / self.std
-        shift = np.hstack([z, np.ones((len(z), 1), np.float32)]) @ self.box_weights
-        fitted = []
-        for (x, y, w, h), (dx, dy, log_w, log_h) in zip(boxes, shift):
-            new_w, new_h = float(np.exp(log_w)), float(np.exp(log_h))
-            cx, cy = x + w / 2 + dx, y + h / 2 + dy
-            fitted.append([cx - new_w / 2, cy - new_h / 2, new_w, new_h])
-        return fitted
+        return fitted_boxes(features, boxes, self.mean, self.std, self.box_weights)
 
     def detect(self, gray, threshold=None):
         # returns (box, score) pairs for one frame
         # threshold None uses the one tuned on the validation images, 0 keeps every candidate for map
-        features, boxes = frame_features(gray)
+        features, boxes = frame_features(gray, self.limit)
         if not boxes:
             return []
         limit = self.threshold if threshold is None else threshold

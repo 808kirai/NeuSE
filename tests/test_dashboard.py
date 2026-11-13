@@ -5,7 +5,11 @@ import cv2
 import numpy as np
 import pytest
 
-from src.pipeline import dual_spectral_pipeline
+from contextlib import closing
+
+from src.config import config
+from src.logger import connect
+from src.pipeline import thermal_pipeline
 
 # the dashboard is a script, not a package, so it is loaded by file path
 app_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "app.py")
@@ -21,7 +25,7 @@ def load_dashboard():
 
 def log_one_detection():
     """run the real pipeline on a frame with one warm area"""
-    pipe = dual_spectral_pipeline()
+    pipe = thermal_pipeline()
     frame = np.zeros((480, 640), dtype=np.uint8)
     cv2.rectangle(frame, (200, 150), (260, 250), 255, -1)
     pipe.process_frames(thermal_frame=frame)
@@ -46,8 +50,8 @@ def test_telemetry_reports_pipeline_output():
     body = client.get("/api/telemetry").get_json()
     assert body["total"] == 1
     # nothing has been sent to a command center yet
-    assert body["queued"] == 1
-    assert body["detector"] == "classical-baseline"
+    assert body["queued"] == 1 and body["refused"] == 0
+    assert body["detector"] == "warm-spots"
     assert body["avg_latency_ms"] == pytest.approx(pipe.last_latency_ms, abs=0.01)
     assert body["data"][0]["confidence"] is None
 
@@ -64,3 +68,23 @@ def test_index_page_has_no_remote_assets():
     """the dashboard must work with no internet"""
     html = load_dashboard().app.test_client().get("/").get_data(as_text=True)
     assert "http://" not in html and "https://" not in html
+
+
+def test_average_time_counts_every_frame_not_every_detection(monkeypatch):
+    """the average used to come from detection rows, so frames with many hits counted many times
+    and frames with none never counted"""
+    monkeypatch.setattr(config, "status_every", 0.0)
+    pipe = log_one_detection()
+    for _ in range(4):
+        pipe.process_frames(thermal_frame=np.zeros((480, 640), dtype=np.uint8))
+    body = load_dashboard().app.test_client().get("/api/telemetry").get_json()
+    assert body["total"] == 1
+    assert body["avg_latency_ms"] == pytest.approx(sum(pipe.recent_ms) / 5, abs=0.01)
+
+
+def test_refused_detections_show_on_the_dashboard():
+    log_one_detection()
+    with closing(connect()) as conn, conn:
+        conn.execute("update detections set sync_error = 'bad box'")
+    body = load_dashboard().app.test_client().get("/api/telemetry").get_json()
+    assert body["refused"] == 1 and body["queued"] == 0

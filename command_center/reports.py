@@ -22,6 +22,8 @@ from command_center import store
 area_radius = 100.0
 # areas listed in a report, the rest are counted
 max_areas = 8
+# areas handed to a language model
+model_areas = 20
 metres_per_degree = 111320
 
 
@@ -63,26 +65,32 @@ def minutes_since(iso, now):
     return max(0, round((now - datetime.fromisoformat(iso)).total_seconds() / 60))
 
 
-def gather(db, minutes=30, now=None, online_window=60):
+def gather(db, minutes=30, now=None, online_window=60, detecting_window=30):
     # the facts a report is written from, all measured, nothing guessed
     now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
     start = (now - timedelta(minutes=minutes)).isoformat()
     with closing(store.connect(db)) as conn:
         conn.row_factory = sqlite3.Row
         sightings = [dict(r) for r in conn.execute("""
-            select unit_id, timestamp_utc, latitude, longitude, confidence
+            select unit_id, timestamp_utc, latitude, longitude, confidence, position_source
             from detections where timestamp_utc >= ? and timestamp_utc <= ?
         """, (start, now.isoformat()))]
 
     units = []
     for unit in store.units(db):
-        contact = datetime.fromisoformat(unit["last_contact"])
+        state = store.unit_state(unit, now, online_window, detecting_window)
+        quiet = state["detector_idle_s"]
         units.append({
             "unit_id": unit["unit_id"],
-            "online": (now - contact).total_seconds() <= online_window,
+            "online": state["online"],
             "minutes_since_contact": minutes_since(unit["last_contact"], now),
+            # false when the unit is in contact but its detector has stopped handling frames, None when unknown
+            "detecting": state["detecting"],
+            "detector_quiet_minutes": None if quiet is None else round(quiet / 60),
             # sightings still on the unit, the command center cannot see them yet
             "waiting_on_unit": unit["queued"] or 0,
+            # sightings the command center turned away, someone has to look at that unit
+            "refused_on_unit": unit["refused"] or 0,
             "sightings_in_window": sum(1 for s in sightings if s["unit_id"] == unit["unit_id"]),
             "latitude": unit["latitude"],
             "longitude": unit["longitude"],
@@ -111,6 +119,9 @@ def gather(db, minutes=30, now=None, online_window=60):
         "generated_at": now.isoformat(timespec="seconds"),
         "window_minutes": minutes,
         "sightings": len(sightings),
+        # sightings placed at the unit itself because it gave no height, heading and camera tilt
+        # the person can be a few hundred metres from such a position
+        "sightings_placed_at_unit": sum(1 for s in sightings if s["position_source"] != "projected"),
         "areas": areas,
         "units": units,
     }
@@ -133,6 +144,12 @@ def write_template(facts):
             lines.append(note + ".")
         elif unit["waiting_on_unit"]:
             lines.append(f"{unit['unit_id']} is online and still sending {count(unit['waiting_on_unit'], 'sighting')}.")
+        if unit["online"] and unit["detecting"] is False:
+            lines.append(f"{unit['unit_id']} is in contact but its detector has been quiet for "
+                         f"{unit['detector_quiet_minutes']} min, so it is not searching.")
+        if unit["refused_on_unit"]:
+            lines.append(f"{unit['unit_id']} holds {count(unit['refused_on_unit'], 'sighting')} the command center "
+                         "refused, that unit needs checking.")
 
     if not facts["areas"]:
         lines.append("No sightings of people in this window.")
@@ -151,6 +168,10 @@ def write_template(facts):
     hidden = len(facts["areas"]) - max_areas
     if hidden > 0:
         lines.append(f"{count(hidden, 'more area')} on the map.")
+    at_unit = facts["sightings_placed_at_unit"]
+    if at_unit:
+        lines.append(f"{count(at_unit, 'sighting')} could only be placed at the unit's own position, "
+                     "the person can be a few hundred metres from it.")
     return "\n".join(lines)
 
 
@@ -159,9 +180,17 @@ instructions = (
     "Use only the facts in the JSON you are given and never add numbers, places or events that are not there. "
     "A sighting is one detection in one camera frame, the same person can appear in many, "
     "so never turn sightings into a count of people. "
-    "Start with what needs attention first, such as recent areas with many sightings and silent units with "
-    "sightings still waiting to send. Give coordinates as they appear. Use plain sentences, at most 150 words."
+    "Start with what needs attention first, such as recent areas with many sightings, silent units with "
+    "sightings still waiting to send, units in contact whose detector has stopped and units holding refused "
+    "sightings. Say so when sightings are only placed at the unit's own position. "
+    "Give coordinates as they appear. Use plain sentences, at most 150 words."
 )
+
+
+def for_model(facts):
+    # the facts handed to the language model, with the list of areas kept short so the request stays small
+    listed = facts["areas"][:model_areas]
+    return {**facts, "areas": listed, "areas_not_listed": len(facts["areas"]) - len(listed)}
 
 
 def write_with_model(facts, url, key, model, timeout=20):
@@ -169,7 +198,7 @@ def write_with_model(facts, url, key, model, timeout=20):
     body = json.dumps({
         "model": model,
         "messages": [{"role": "system", "content": instructions},
-                     {"role": "user", "content": json.dumps(facts)}],
+                     {"role": "user", "content": json.dumps(for_model(facts))}],
         "temperature": 0.2,
         "max_tokens": 400,
     }).encode("utf-8")
@@ -183,10 +212,10 @@ def write_with_model(facts, url, key, model, timeout=20):
     return text
 
 
-def report(db, minutes=30, llm=None, now=None):
+def report(db, minutes=30, llm=None, now=None, online_window=60, detecting_window=30):
     # the full report, the text plus the facts it came from
     # llm is (url, key, model) or None, the facts always come with the text so coordinators can check them
-    facts = gather(db, minutes, now)
+    facts = gather(db, minutes, now, online_window, detecting_window)
     if llm and all(llm):
         try:
             return {"source": "model", "text": write_with_model(facts, *llm), "facts": facts}

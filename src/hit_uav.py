@@ -11,6 +11,7 @@ from pathlib import Path
 
 # class ids in the dataset's json files
 person_id = 0
+bicycle_id = 2
 dont_care_id = 4
 class_names = {0: "person", 1: "car", 2: "bicycle", 3: "other vehicle", 4: "dont care"}
 
@@ -40,6 +41,7 @@ def load_split(root, split):
             "people": [],
             "ignore": [],
             "others": [],
+            "bicycles": [],
             **parse_name(image["filename"]),
         }
 
@@ -52,7 +54,11 @@ def load_split(root, split):
         elif label["category_id"] == dont_care_id:
             record["ignore"].append(box)
         else:
+            # cars, bicycles and other vehicles, bicycles are also listed on their own
+            # the dataset marks a bike and its rider as one bicycle box, with no person box for the rider
             record["others"].append(box)
+            if label["category_id"] == bicycle_id:
+                record["bicycles"].append(box)
 
     # sorted by file name so every run goes through images in the same order
     return sorted(records.values(), key=lambda r: r["file"])

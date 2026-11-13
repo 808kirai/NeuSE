@@ -1,0 +1,2 @@
+# third party files are kept byte for byte, so they still match the published copies
+command_center/static/leaflet/* -text

@@ -21,7 +21,7 @@ import numpy as np
 # put the project root on the path so src can be imported
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.pipeline import dual_spectral_pipeline
+from src.pipeline import thermal_pipeline
 
 
 def synthetic_thermal_frame(step, rng, height=480, width=640, targets=2):
@@ -54,7 +54,7 @@ def replay(args):
     images = sorted(Path(args.replay).glob("*.jpg")) + sorted(Path(args.replay).glob("*.png"))
     if not images:
         sys.exit(f"no jpg or png images in {args.replay}")
-    pipe = dual_spectral_pipeline()
+    pipe = thermal_pipeline()
     for step, path in enumerate(images[:args.frames]):
         frame = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
         hits = pipe.process_frames(thermal_frame=frame)
@@ -79,7 +79,7 @@ def main():
 
     # a fixed seed makes every run produce the same frames
     rng = np.random.default_rng(args.seed)
-    pipe = dual_spectral_pipeline("warm-spots")
+    pipe = thermal_pipeline("warm-spots")
 
     for step in range(args.frames):
         frame = synthetic_thermal_frame(step, rng)
