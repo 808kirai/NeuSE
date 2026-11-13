@@ -22,6 +22,12 @@ class config:
     # the classical baseline has no scores so it skips this check
     conf_threshold = 0.85
 
+    # contrast boost applied before the threshold
+    # a higher clip limit boosts harder, smaller tiles boost more locally
+    # people in drone footage are only about 14 by 15 pixels, so strong settings can blur them into the background
+    clahe_clip_limit = 2.0
+    clahe_tile_grid = 8
+
     # pixels brighter than this after contrast boost count as warm
     thermal_threshold = 200
 

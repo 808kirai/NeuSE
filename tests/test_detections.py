@@ -137,3 +137,32 @@ def test_logger_upgrades_old_database(isolated_db):
     rows = stored_rows(isolated_db)
     assert len(rows) == 2
     assert rows[1]["detector"] == "x"
+
+
+# hit-uav sized frames, 640 by 512
+def test_empty_drone_frame_has_no_hits(pipeline):
+    assert pipeline.process_frames(thermal_frame=np.zeros((512, 640), dtype=np.uint8)) == []
+
+
+def test_single_hot_pixels_are_not_hits(pipeline):
+    frame = np.full((512, 640), 40, dtype=np.uint8)
+    frame[100, 100] = frame[300, 500] = frame[0, 0] = 255
+    assert pipeline.process_frames(thermal_frame=frame) == []
+
+
+@pytest.mark.parametrize("x, y", [(0, 0), (626, 0), (0, 497), (626, 497)])
+def test_person_touching_the_frame_edge_is_found(pipeline, x, y):
+    # a person sized warm patch cut off by each corner of the frame
+    frame = np.full((512, 640), 40, dtype=np.uint8)
+    frame[y:y + 15, x:x + 14] = 255
+    hits = pipeline._detect(frame)
+    assert len(hits) == 1
+    assert hits[0]["bbox"] == [x, y, 14, 15]
+
+
+def test_contrast_settings_come_from_config(monkeypatch):
+    monkeypatch.setattr(config, "clahe_clip_limit", 3.5)
+    monkeypatch.setattr(config, "clahe_tile_grid", 4)
+    pipe = dual_spectral_pipeline()
+    assert pipe.clahe.getClipLimit() == 3.5
+    assert pipe.clahe.getTilesGridSize() == (4, 4)
