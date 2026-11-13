@@ -4,19 +4,23 @@ import cv2
 import numpy as np
 from src.config import config
 from src.logger import data_logger
+from src.person_check import person_check
 
 # warnings about skipped frames go to the standard python log
 log = logging.getLogger(__name__)
 
 # saved with each detection so results from different detectors can be told apart
 detector_name = "classical-baseline"
+person_check_name = "classical-person-check"
+detectors = ("person-check", "warm-spots")
 
 
-# finds warm areas in thermal frames
-# this is the classical baseline with no trained model behind it
-# so it gives no confidence score and does not use the rgb frame yet
+# finds people in thermal frames with one of two classical detectors
+# person-check scores small warm spots with a small trained check and gives a confidence
+# warm-spots flags any bright area of the right size and gives no confidence
+# neither uses the rgb frame yet
 class dual_spectral_pipeline:
-    def __init__(self):
+    def __init__(self, detector=None):
         # writes detections to the local database
         self.logger = data_logger()
         # reuse clahe instead of building it every frame
@@ -24,6 +28,19 @@ class dual_spectral_pipeline:
         self.clahe = cv2.createCLAHE(clipLimit=config.clahe_clip_limit, tileGridSize=(grid, grid))
         # time spent on the last frame in ms
         self.last_latency_ms = None
+
+        # pick the detector, the person check needs its trained weights
+        self.detector = detector or config.detector
+        if self.detector not in detectors:
+            raise ValueError(f"unknown detector {self.detector}, use one of {detectors}")
+        self.checker = None
+        if self.detector == "person-check":
+            if config.person_check_path.exists():
+                self.checker = person_check(config.person_check_path)
+            else:
+                # keep detecting with the older method instead of stopping the unit
+                log.warning("no weights at %s, using warm-spots", config.person_check_path)
+                self.detector = "warm-spots"
 
     def process_frames(self, rgb_frame=None, thermal_frame=None):
         # main entry point, called once per pair of camera frames
@@ -40,8 +57,9 @@ class dual_spectral_pipeline:
             self.logger.log_events(hits, self.last_latency_ms)
         return hits
 
-    def _detect(self, thermal_frame):
-        # returns the warm areas in one thermal frame
+    def _detect(self, thermal_frame, min_score=None):
+        # returns the people found in one thermal frame
+        # min_score overrides the person check threshold, scoring uses 0 to keep every candidate
 
         # no thermal frame means nothing to detect
         if not isinstance(thermal_frame, np.ndarray) or thermal_frame.size == 0:
@@ -52,6 +70,9 @@ class dual_spectral_pipeline:
         if thermal_gray is None:
             log.warning("skipping thermal frame with unsupported shape %s", thermal_frame.shape)
             return []
+
+        if self.checker is not None:
+            return self._person_check_hits(thermal_gray, min_score)
 
         # opencv can still reject odd frames, so skip them instead of crashing
         try:
@@ -87,6 +108,31 @@ class dual_spectral_pipeline:
                 "detector": detector_name,
             })
 
+        return hits
+
+    def _person_check_hits(self, thermal_gray, min_score):
+        # runs the person check and turns its boxes into detections
+        try:
+            found = self.checker.detect(thermal_gray, min_score)
+        except cv2.error as err:
+            log.warning("skipping thermal frame opencv could not process %s", err)
+            return []
+
+        height, width = thermal_gray.shape
+        hits = []
+        for (x, y, w, h), score in found:
+            # fitted boxes can reach past the frame edge, so trim them to whole pixels inside it
+            x0, y0 = max(0, int(round(x))), max(0, int(round(y)))
+            x1, y1 = min(width, int(round(x + w))), min(height, int(round(y + h)))
+            if x1 <= x0 or y1 <= y0:
+                continue
+            hits.append({
+                "bbox": [x0, y0, x1 - x0, y1 - y0],
+                # chance this spot is a person, 0 to 1
+                "confidence": round(score, 4),
+                "thermal_peak": int(np.max(thermal_gray[y0:y1, x0:x1])),
+                "detector": person_check_name,
+            })
         return hits
 
     @staticmethod
@@ -137,7 +183,8 @@ class VisionPipeline(dual_spectral_pipeline):
 # quick check with one fake warm body in an empty scene
 # run with python -m src.pipeline
 if __name__ == "__main__":
-    engine = dual_spectral_pipeline()
+    # a big made up warm shape, so this uses the warm-spots detector
+    engine = dual_spectral_pipeline("warm-spots")
     test_rgb = np.zeros((480, 640, 3), dtype=np.uint8)
     test_thermal = np.zeros((480, 640, 3), dtype=np.uint8)
     cv2.rectangle(test_thermal, (200, 150), (280, 260), (255, 255, 255), -1)

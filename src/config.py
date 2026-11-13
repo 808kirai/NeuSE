@@ -18,8 +18,16 @@ def parse_range(text):
 # shared settings for the pipeline, logger and dashboard
 # values are read when used, so tests can swap them safely
 class config:
+    # which detector the pipeline runs
+    # person-check finds small warm spots and scores each one with a small trained check, the default
+    # warm-spots is the first baseline, any bright area of the right size, kept for comparison and the demo feed
+    detector = os.environ.get("NEUSE_DETECTOR", "person-check")
+
+    # weights for the person check, made by scripts/train_person_check.py
+    person_check_path = project_root / "models" / "person_check.npz"
+
     # lowest score a trained model needs to report a detection
-    # the classical baseline has no scores so it skips this check
+    # not used yet, the person check keeps its own threshold tuned on the validation images
     conf_threshold = 0.85
 
     # contrast boost applied before the threshold

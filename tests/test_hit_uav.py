@@ -115,3 +115,10 @@ def test_save_vis_writes_worst_frames(dataset, tmp_path):
     assert len(saved) == 1
     # raw and marked frames side by side
     assert cv2.imread(str(saved[0])).shape == (512, 1280, 3)
+
+
+def test_evaluate_person_check_uses_its_threshold(dataset):
+    result = evaluate(load_split(dataset, "test"), detector="person-check")
+    assert result["detector"] == "person-check"
+    assert 0 < result["cutoff"] < 1
+    assert 0.0 <= result["map50"]["all"] <= 1.0
