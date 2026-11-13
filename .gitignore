@@ -2,8 +2,10 @@
 __pycache__/
 *.pyc
 
-# local database files
+# local database files and their write ahead logs
 *.db
+*.db-wal
+*.db-shm
 
 # environment and API keys
 .env

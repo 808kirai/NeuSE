@@ -189,6 +189,10 @@
                 <div class="metric-label">Total Detections</div>
                 <div class="metric-value" id="detection-count">0</div>
             </div>
+            <div class="metric-card">
+                <div class="metric-label">Waiting To Send</div>
+                <div class="metric-value" id="queued-count">0</div>
+            </div>
         </div>
 
         <div class="table-wrapper">
@@ -223,6 +227,7 @@
                 document.getElementById('avg-latency').textContent =
                     typeof json.avg_latency_ms === 'number' ? json.avg_latency_ms.toFixed(1) + ' ms' : '—';
                 document.getElementById('detection-count').textContent = json.total || 0;
+                document.getElementById('queued-count').textContent = json.queued || 0;
                 document.getElementById('system-status').textContent = 'Local node online';
 
                 // clear the old rows before drawing new ones
