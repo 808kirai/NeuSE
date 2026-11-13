@@ -6,8 +6,8 @@ NeuSE has two halves: field units that work with no network, and a command cente
 ```
 thermal frames -> detection pipeline -> local SQLite log -> local dashboard
 ```
-- **Detection** (`src/pipeline.py`) finds warm areas with contrast enhancement, thresholding and connected components. This is a baseline with no trained model. On the HIT-UAV test images it finds 36% of people, and only 4.9% of its hits are people.
-- **Log** (`src/logger.py`) stores each detection with its time, position, box, peak intensity, detector name and processing time. Confidence is left empty until a model provides one.
+- **Detection** (`src/pipeline.py`, `src/person_check.py`) finds small warm spots by local contrast, scores each one with a small neural network run in NumPy, then fits and de-duplicates the boxes. On the HIT-UAV test images it scores mAP@0.5 0.670 at about 24 ms per frame on a laptop CPU. The first warm spot baseline, at mAP@0.5 0.070, can still be chosen with `NEUSE_DETECTOR=warm-spots`.
+- **Log** (`src/logger.py`) stores each detection with its time, position, box, confidence, peak intensity, detector name and processing time. Confidence is empty for warm spots, which has none.
 - **Dashboard** (`dashboard/app.py`) shows recent detections on the unit itself, with no internet needed.
 
 ## Planned

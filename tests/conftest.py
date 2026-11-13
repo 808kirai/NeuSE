@@ -16,3 +16,10 @@ def isolated_db(tmp_path, monkeypatch):
     db = tmp_path / "test.db"
     monkeypatch.setattr(config, "db_path", db)
     return db
+
+
+@pytest.fixture(autouse=True)
+def warm_spots_by_default(monkeypatch):
+    """most tests draw large made up warm shapes, which only the warm-spots detector is meant to find
+    tests of the person check ask for it by name"""
+    monkeypatch.setattr(config, "detector", "warm-spots")
