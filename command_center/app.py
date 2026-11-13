@@ -15,7 +15,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
-from command_center import store
+from command_center import reports, store
 
 project_root = Path(__file__).resolve().parent.parent
 
@@ -50,12 +50,15 @@ def utc(text):
     return moment.astimezone(timezone.utc)
 
 
-def create_app(db_path=None, token=None):
-    # builds the app, tests pass their own database and token
+def create_app(db_path=None, token=None, llm=None):
+    # builds the app, tests pass their own database, token and language model settings
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = max_upload
     db = Path(db_path or os.environ.get("NEUSE_CC_DB", project_root / "command_center.db"))
     secret = token if token is not None else os.environ.get("NEUSE_CC_TOKEN")
+    # optional language model for situation reports, an openai style chat api such as huawei cloud's model service
+    llm = llm if llm is not None else (os.environ.get("NEUSE_LLM_URL"), os.environ.get("NEUSE_LLM_KEY"),
+                                       os.environ.get("NEUSE_LLM_MODEL"))
     store.setup(db)
 
     def allowed():
@@ -139,6 +142,19 @@ def create_app(db_path=None, token=None):
         except ValueError:
             return jsonify({"error": "after and limit must be whole numbers"}), 400
         return jsonify({"detections": store.recent(db, after, limit)})
+
+    @app.get("/api/v1/report")
+    def situation_report():
+        # a plain language summary of the last few minutes, with the facts it was written from
+        if not allowed():
+            return refused
+        try:
+            minutes = int(request.args.get("minutes", 30))
+        except ValueError:
+            return jsonify({"error": "minutes must be a whole number"}), 400
+        if not 1 <= minutes <= 1440:
+            return jsonify({"error": "minutes must be between 1 and 1440"}), 400
+        return jsonify(reports.report(db, minutes, llm))
 
     return app
 

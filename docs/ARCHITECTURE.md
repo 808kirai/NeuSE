@@ -1,6 +1,6 @@
 Architecture
 
-NeuSE has two halves. Field units work with no network, and a command center brings their results together. The field unit and the command center with its coordinator map are built and run locally. Moving the command center to Huawei Cloud and adding situation reports are planned.
+NeuSE has two halves. Field units work with no network, and a command center brings their results together. The field unit and the command center with its coordinator map are built and run locally. Situation reports are built too. Moving the command center to Huawei Cloud is planned.
 
 Field unit, built
 
@@ -23,7 +23,8 @@ many field units -> /api/v1/detections and /api/v1/status -> command center data
 ```
 
 - API, `command_center/app.py` - Receives batches and status notes from units, checks every detection and reports which it took and which it refused. With `NEUSE_CC_TOKEN` set, every request needs the token.
-- Coordinator map, `command_center/templates/index.html` - Shows every unit, online or offline, its backlog and the people it found on a live map. It follows detections in the order they arrive, so a backlog sent after an outage still shows up.
+- Coordinator map, `command_center/templates/index.html` - Shows every unit, online or offline, its backlog and its sightings on a live map. It follows detections in the order they arrive, so a backlog sent after an outage still shows up.
+- Situation reports, `command_center/reports.py` - Work out the facts for a time window, such as silent units with sightings still waiting and areas where people were seen, then write them up in plain words. A template writes them with no network needed, or an OpenAI style language model does when one is set up, falling back to the template if it fails.
 - Storage, `command_center/store.py` - Keeps each detection id once, so units can safely resend. SQLite for now, kept in one module so it can move to Huawei Cloud RDS.
 
 Planned
@@ -31,7 +32,7 @@ Planned
 - Training - A MindYOLO person detector trained on Huawei Cloud ModelArts with the HIT-UAV thermal drone dataset, then exported to MindIR.
 - On-device inference - MindSpore Lite runs the trained model on the field unit in place of the person check. It targets an ordinary CPU first, and Ascend hardware if it becomes available.
 - RGB and thermal together - The RGB camera confirms thermal hits to cut false alarms from hot objects that are not people.
-- Command center on Huawei Cloud - The API and map on ECS with an RDS database, and plain language situation reports for rescue coordinators.
+- Command center on Huawei Cloud - The API, map and reports on ECS with an RDS database, with reports written by a model on Huawei Cloud.
 - Ground positions - Each detection is placed where its unit was. Projecting it onto the ground from the camera angle and altitude would place it more exactly.
 
 Full flow once built

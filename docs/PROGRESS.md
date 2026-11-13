@@ -80,8 +80,19 @@ Decision - The map follows detections in the order they arrive, not by detection
 
 Known limits - Map tiles come from public OpenStreetMap and need internet. Detections are placed at the unit's position, not projected onto the ground.
 
+2026-11-13 - Situation reports, PR 21
+
+- Short plain language reports for a chosen window. They cover which units are online, which have gone silent with sightings still waiting, and the areas where people were seen, each with its position, sightings, units, recency, highest confidence and nearest unit
+- Sightings within 100 m count as one area
+- A template writes the report by default, so it works with no internet. An OpenAI style chat API can write it instead when set up, such as a model on Huawei Cloud, with the template used if it fails
+- The facts always come back with the text so coordinators can check them
+- Live check - 3 units with link drops, 360 sightings grouped into 7 areas, each with its nearest unit and distance
+
+Decision - The page and reports now say sightings, not people found. The same person seen in many frames is many sightings, so counting people would overstate the result.
+
+Decision - Reports are written only when a coordinator asks, so a paid language model is not called on every refresh.
+
 Next
 
-- Situation reports for coordinators, working offline from a template and able to use an LLM on Huawei Cloud
 - Command center on Huawei Cloud ECS with RDS
 - MindYOLO training on ModelArts once access is ready, then MindSpore Lite on the unit

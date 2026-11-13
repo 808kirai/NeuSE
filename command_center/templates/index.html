@@ -94,6 +94,33 @@
 
         .empty { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
 
+        .report { margin-bottom: 18px; }
+
+        .report-controls { display: flex; gap: 8px; margin-bottom: 10px; }
+
+        .report-controls select, .report-controls button {
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            border: 1px solid var(--border);
+        }
+
+        .report-controls select { flex: 1; background: var(--card); color: var(--text); }
+
+        .report-controls button { background: var(--text); color: var(--bg); font-weight: 600; cursor: pointer; border: none; }
+
+        .report-controls button:disabled { opacity: 0.5; cursor: wait; }
+
+        .report-text {
+            white-space: pre-wrap;
+            font-size: 13px;
+            line-height: 1.55;
+            border: 1px solid var(--border);
+            background: var(--card);
+            border-radius: 8px;
+            padding: 10px 12px;
+        }
+
         #login {
             position: fixed;
             inset: 0;
@@ -147,13 +174,27 @@
             <div class="legend">
                 <span><i class="dot" style="background: var(--online)"></i>Unit online</span>
                 <span><i class="dot" style="background: var(--offline)"></i>Unit offline</span>
-                <span><i class="dot" style="background: var(--fresh)"></i>Person, last 5 min</span>
+                <span><i class="dot" style="background: var(--fresh)"></i>Sighting, last 5 min</span>
                 <span><i class="dot" style="background: var(--recent)"></i>Last hour</span>
                 <span><i class="dot" style="background: var(--old)"></i>Older</span>
             </div>
+            <h2>Situation report</h2>
+            <div class="report">
+                <div class="report-controls">
+                    <select id="report-minutes" aria-label="Report window">
+                        <option value="15">Last 15 min</option>
+                        <option value="30" selected>Last 30 min</option>
+                        <option value="60">Last hour</option>
+                        <option value="360">Last 6 hours</option>
+                    </select>
+                    <button id="report-button" type="button">Write report</button>
+                </div>
+                <div id="report-text" class="report-text">Write a report to summarise what the units have seen.</div>
+                <div id="report-note" class="meta"></div>
+            </div>
             <h2>Units</h2>
             <div id="units"><div class="empty">No units have reported yet.</div></div>
-            <h2>Latest people found</h2>
+            <h2>Latest sightings</h2>
             <div id="hits"><div class="empty">No detections yet.</div></div>
         </aside>
     </main>
@@ -251,7 +292,7 @@
                 name.append(dot, el('span', '', unit.unit_id));
                 const meta = el('div', 'meta');
                 meta.append(el('div', '', (unit.online ? 'Online' : 'Offline') + ', last heard ' + ago(unit.last_contact)));
-                meta.append(el('div', '', unit.detections + ' people found' + (unit.detector ? ' with ' + unit.detector : '')));
+                meta.append(el('div', '', unit.detections + ' sightings' + (unit.detector ? ' with ' + unit.detector : '')));
                 if (unit.queued) meta.append(el('div', 'backlog', unit.queued + ' detections waiting on the unit'));
                 card.append(name, meta);
                 card.addEventListener('click', () => map.setView([unit.latitude, unit.longitude], 17));
@@ -326,11 +367,33 @@
                 fitOnce();
                 const online = unitData.units.filter(u => u.online).length;
                 document.getElementById('summary').textContent =
-                    online + ' of ' + unitData.units.length + ' units online, ' + unitData.detections + ' people found';
+                    online + ' of ' + unitData.units.length + ' units online, ' + unitData.detections + ' sightings';
             } catch (e) {
                 document.getElementById('summary').textContent = 'Waiting for the server';
             }
         }
+
+        async function writeReport() {
+            // reports are written on request, so a language model is only called when a coordinator asks
+            const button = document.getElementById('report-button');
+            button.disabled = true;
+            document.getElementById('report-text').textContent = 'Writing...';
+            document.getElementById('report-note').textContent = '';
+            try {
+                const minutes = document.getElementById('report-minutes').value;
+                const result = await api('/api/v1/report?minutes=' + minutes);
+                document.getElementById('report-text').textContent = result.text;
+                const source = result.source === 'model' ? 'Written by the language model from the measured facts'
+                                                         : 'Written from the template';
+                document.getElementById('report-note').textContent =
+                    (result.note ? result.note : source) + ', ' + new Date(result.facts.generated_at).toLocaleTimeString();
+            } catch (e) {
+                document.getElementById('report-text').textContent = 'Could not write the report, ' + e.message;
+            }
+            button.disabled = false;
+        }
+
+        document.getElementById('report-button').addEventListener('click', writeReport);
 
         refresh();
         setInterval(refresh, 5000);

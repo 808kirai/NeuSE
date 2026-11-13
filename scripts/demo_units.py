@@ -68,7 +68,7 @@ class link:
 
 def run_unit(images, index, units, base, send, send_status, radio, frames, fps=1.0, sync_every=3,
              sleep=time.sleep, say=print):
-    # flies one unit for frames frames and returns how many detections it made
+    # flies one unit for frames frames and returns how many sightings it made
     # the database and unit name come from config, which the parent sets for each process
     from src import sync
     from src.config import config
@@ -101,7 +101,7 @@ def run_unit(images, index, units, base, send, send_status, radio, frames, fps=1
         send_status(sync.status_note())
     except sync.send_error:
         pass
-    say(f"{config.unit_id} done, {found} people found, {sync.pending_count()} still waiting")
+    say(f"{config.unit_id} done, {found} sightings, {sync.pending_count()} still waiting")
     return found
 
 
