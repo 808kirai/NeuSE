@@ -110,6 +110,7 @@ Layout
 - `models/` - Trained model files
 - `tests/` - Automated tests
 - `docs/ARCHITECTURE.md` - How the parts fit together
+- `docs/PROGRESS.md` - Dated record of what was built, measured and decided
 
 Run it
 
