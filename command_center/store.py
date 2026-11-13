@@ -26,6 +26,19 @@ schema = """
     )
 """
 
+# the latest status note from each unit
+units_schema = """
+    create table if not exists units (
+        unit_id text primary key,
+        last_status_at text not null,
+        queued integer,
+        latitude real,
+        longitude real,
+        detector text,
+        frames integer
+    )
+"""
+
 uid_pattern = re.compile(r"^[0-9a-f]{32}$")
 unit_pattern = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
@@ -38,6 +51,8 @@ def setup(path):
     with closing(connect(path)) as conn, conn:
         conn.execute("pragma journal_mode=wal")
         conn.execute(schema)
+        conn.execute(units_schema)
+        conn.execute("create index if not exists detections_time on detections (timestamp_utc)")
         conn.execute("create index if not exists detections_unit on detections (unit_id, timestamp_utc)")
 
 
@@ -103,23 +118,97 @@ def save(path, detections):
     return accepted, rejected
 
 
+def status_problem(note):
+    # returns why a status note cannot be stored, or None when it is fine
+    if not isinstance(note, dict):
+        return "status must be an object"
+    if not isinstance(note.get("unit_id"), str) or not unit_pattern.match(note["unit_id"]):
+        return "unit_id must be 1 to 64 letters, digits, dots, dashes or underscores"
+    if not number(note.get("latitude"), -90, 90) or not number(note.get("longitude"), -180, 180):
+        return "latitude and longitude must be valid coordinates"
+    for name in ("queued", "frames"):
+        value = note.get(name)
+        if value is not None and not (isinstance(value, int) and not isinstance(value, bool) and value >= 0):
+            return f"{name} must be empty or a whole number"
+    if note.get("detector") is not None and not (isinstance(note["detector"], str) and len(note["detector"]) <= 64):
+        return "detector must be empty or a short name"
+    return None
+
+
+def save_status(path, note):
+    # keeps the newest status note per unit, timed by the command center's own clock
+    received = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with closing(connect(path)) as conn, conn:
+        conn.execute("""
+            insert into units (unit_id, last_status_at, queued, latitude, longitude, detector, frames)
+            values (?, ?, ?, ?, ?, ?, ?)
+            on conflict (unit_id) do update set last_status_at = excluded.last_status_at, queued = excluded.queued,
+                latitude = excluded.latitude, longitude = excluded.longitude, detector = excluded.detector,
+                frames = excluded.frames
+        """, (note["unit_id"], received, note.get("queued"), note["latitude"], note["longitude"],
+              note.get("detector"), note.get("frames")))
+
+
 def units(path):
-    # one summary per field unit, newest activity first
+    # one summary per field unit, from its detections and its latest status note
     with closing(connect(path)) as conn:
         conn.row_factory = sqlite3.Row
-        rows = conn.execute("""
+        found = {row["unit_id"]: dict(row) for row in conn.execute("""
             select unit_id, count(*) as detections, max(timestamp_utc) as last_detection,
                    max(received_at) as last_received
-            from detections group by unit_id order by last_received desc
-        """).fetchall()
+            from detections group by unit_id
+        """)}
+        notes = {row["unit_id"]: dict(row) for row in conn.execute("select * from units")}
+
         summaries = []
-        for row in rows:
-            latest = conn.execute("""
-                select latitude, longitude from detections where unit_id = ?
-                order by timestamp_utc desc limit 1
-            """, (row["unit_id"],)).fetchone()
-            summaries.append({**dict(row), "latitude": latest["latitude"], "longitude": latest["longitude"]})
-    return summaries
+        for unit_id in sorted(set(found) | set(notes)):
+            seen = found.get(unit_id, {})
+            note = notes.get(unit_id, {})
+            summary = {
+                "unit_id": unit_id,
+                "detections": seen.get("detections", 0),
+                "last_detection": seen.get("last_detection"),
+                # the last time anything arrived from the unit
+                "last_contact": max(t for t in (seen.get("last_received"), note.get("last_status_at")) if t),
+                "queued": note.get("queued"),
+                "detector": note.get("detector"),
+                "frames": note.get("frames"),
+                "latitude": note.get("latitude"),
+                "longitude": note.get("longitude"),
+            }
+            # without a status note the unit is placed at its newest detection
+            if summary["latitude"] is None:
+                latest = conn.execute("""
+                    select latitude, longitude from detections where unit_id = ?
+                    order by timestamp_utc desc limit 1
+                """, (unit_id,)).fetchone()
+                summary["latitude"], summary["longitude"] = latest["latitude"], latest["longitude"]
+            summaries.append(summary)
+    # most recently heard from first
+    return sorted(summaries, key=lambda u: u["last_contact"], reverse=True)
+
+
+def recent(path, after=None, limit=1000):
+    # detections in the order they arrived, each with a running number seq
+    # with after, only those that arrived later, oldest first, so a page can follow along without missing any
+    # without after, the latest ones, so a page that just opened starts with the current picture
+    # units send their backlog newest first, so arrival order is used here rather than detection time
+    with closing(connect(path)) as conn:
+        conn.row_factory = sqlite3.Row
+        fields = """rowid as seq, uid, unit_id, timestamp, timestamp_utc, latitude, longitude, confidence,
+                    thermal_peak, bbox, detector, received_at"""
+        if after is None:
+            rows = conn.execute(f"select {fields} from detections order by rowid desc limit ?", (limit,)).fetchall()
+            rows = rows[::-1]
+        else:
+            rows = conn.execute(f"select {fields} from detections where rowid > ? order by rowid limit ?",
+                                (after, limit)).fetchall()
+    detections = []
+    for row in rows:
+        detection = dict(row)
+        detection["bbox"] = json.loads(detection["bbox"]) if detection["bbox"] else None
+        detections.append(detection)
+    return detections
 
 
 def count(path):

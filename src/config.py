@@ -49,9 +49,13 @@ class config:
     # e.g. NEUSE_SENSOR_RANGE=27315,31315 for a camera reporting hundredths of a kelvin covers 0 to 40 c
     sensor_range = parse_range(os.environ.get("NEUSE_SENSOR_RANGE"))
 
-    # fixed unit position until a gps feed is added
-    default_lat = -1.286389
-    default_lon = 36.817223
+    # unit position used when the caller gives none, until a gps feed is added
+    # set NEUSE_LAT and NEUSE_LON to place a unit somewhere else
+    default_lat = float(os.environ.get("NEUSE_LAT", -1.286389))
+    default_lon = float(os.environ.get("NEUSE_LON", 36.817223))
+
+    # seconds between the unit's status notes, which tell the command center it is alive and where it is
+    status_every = 5.0
 
     # database shared by the pipeline and dashboard
     # set NEUSE_DB to point it at a different file

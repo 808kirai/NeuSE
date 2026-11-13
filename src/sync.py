@@ -22,7 +22,7 @@ import urllib.request
 from contextlib import closing
 
 from src.config import config
-from src.logger import connect, data_logger, now
+from src.logger import connect, data_logger, now, read_status
 
 log = logging.getLogger(__name__)
 
@@ -74,16 +74,16 @@ def mark(accepted, rejected):
                          [(when, reason, uid) for uid, reason in rejected.items()])
 
 
-def http_sender(url, token=None, timeout=15):
-    # returns a function that posts one batch to the command center and gives back its reply
-    endpoint = url.rstrip("/") + "/api/v1/detections"
+def poster(url, path, token=None, timeout=15):
+    # returns a function that posts json to one command center address and gives back its reply
+    endpoint = url.rstrip("/") + path
     headers = {"Content-Type": "application/json", "Content-Encoding": "gzip"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    def send(detections):
+    def post(payload):
         # compressed, since field links can be slow and paid by the megabyte
-        body = gzip.compress(json.dumps({"detections": detections}).encode("utf-8"))
+        body = gzip.compress(json.dumps(payload).encode("utf-8"))
         request = urllib.request.Request(endpoint, data=body, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -95,7 +95,33 @@ def http_sender(url, token=None, timeout=15):
         except ValueError as err:
             raise send_error("command center reply was not json") from err
 
-    return send
+    return post
+
+
+def http_sender(url, token=None, timeout=15):
+    # returns a function that posts one batch of detections
+    post = poster(url, "/api/v1/detections", token, timeout)
+    return lambda detections: post({"detections": detections})
+
+
+def http_status_sender(url, token=None, timeout=15):
+    # returns a function that posts the unit's status note
+    return poster(url, "/api/v1/status", token, timeout)
+
+
+def status_note():
+    # what the command center hears from a unit even when it has nothing new
+    # where the unit is, what it runs and how many detections are still waiting
+    status = read_status() or {}
+    return {
+        "unit_id": config.unit_id,
+        "queued": pending_count(),
+        "latitude": status.get("latitude", config.default_lat),
+        "longitude": status.get("longitude", config.default_lon),
+        "detector": status.get("detector"),
+        "frames": status.get("frames"),
+        "updated_at": status.get("updated_at") or now(),
+    }
 
 
 def sync_once(send, batch=None):
@@ -128,8 +154,10 @@ def sync_once(send, batch=None):
             return {"synced": synced, "pending": pending_count(), "error": "command center took nothing from the batch"}
 
 
-def run(send, interval=None, max_wait=None, stop=lambda: False, sleep=time.sleep, jitter=random.random):
+def run(send, interval=None, max_wait=None, stop=lambda: False, sleep=time.sleep, jitter=random.random,
+        send_status=None):
     # keeps syncing until stop() is true
+    # send_status, when given, also posts the unit's status note each round
     # after a failure the wait doubles up to max_wait, and goes back to interval once a sync works
     # the random part spreads retries so many units do not all hit the command center at once
     interval = interval or config.sync_interval
@@ -137,6 +165,12 @@ def run(send, interval=None, max_wait=None, stop=lambda: False, sleep=time.sleep
     failures = 0
     while not stop():
         result = sync_once(send)
+        if send_status is not None:
+            try:
+                send_status(status_note())
+            except send_error:
+                # the detections are what matter, a missed status note is simply sent next round
+                pass
         if result["error"]:
             failures += 1
             wait = min(max_wait, interval * 2 ** failures) * (0.5 + jitter() / 2)
@@ -163,14 +197,19 @@ def main():
     # make sure the table exists before the first read
     data_logger()
     send = http_sender(args.url, args.token)
+    send_status = http_status_sender(args.url, args.token)
 
     if args.once:
         result = sync_once(send)
+        try:
+            send_status(status_note())
+        except send_error:
+            pass
         print(f"sent {result['synced']}, still queued {result['pending']}" +
               (f", {result['error']}" if result["error"] else ""))
         return
     log.info("unit %s syncing to %s", config.unit_id, args.url)
-    run(send, interval=args.interval)
+    run(send, interval=args.interval, send_status=send_status)
 
 
 if __name__ == "__main__":
