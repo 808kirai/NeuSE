@@ -19,7 +19,8 @@ Working now
 - Safe handling of missing, empty, 16 bit, float and odd shaped frames
 - A local detection log, with the measured processing time of every frame
 - Store and forward sync. Detections queue on the unit and go to the command center whenever a link is up, newest first, with nothing lost or doubled when the link drops
-- A first command center API that receives detections from many units and summarises each unit
+- A command center that receives detections from many units, with a live map page for coordinators showing every unit, whether it is online, its backlog and the people it has found
+- A demo that flies several units at once on search patterns, with real thermal frames and random link drops
 - A local dashboard showing logged detections and how many still wait to be sent
 - Scoring against the real person labels of the HIT-UAV thermal drone dataset
 - A script that prepares HIT-UAV for MindYOLO training, with person labels only
@@ -32,7 +33,8 @@ Planned
 - Using the RGB camera to confirm thermal hits and cut false alarms
 - Running the command center on Huawei Cloud ECS with an RDS database
 - A map and plain language situation reports for coordinators
-- Live GPS, in place of the fixed position each unit uses today
+- Live GPS, in place of the configured or simulated position units use today
+- Map tiles from Huawei Map Kit or a self hosted server for real deployments. The page uses the public OpenStreetMap tiles today, which need internet and are meant for light use
 
 How detection works
 
@@ -81,6 +83,13 @@ Every detection gets a unique id and the name of its unit when it is logged. It 
 - If a reply gets lost, sending the batch again is safe. The command center keeps each id once
 - The command center checks every detection. One it refuses is kept on the unit with the reason and not sent again, so a bad row cannot block the queue
 - With a token set, the command center refuses any request without it, since detections show where people are
+- Every few seconds the unit also sends a short status note with its position, detector and how many detections still wait. The command center marks a unit offline after 60 seconds without hearing from it
+
+The coordinator page
+
+Open the command center address in a browser. It asks for the token, then shows a map with every unit and every person found, coloured by how recent they are, and a list of units with their state and backlog. It refreshes every 5 seconds and catches up on backlogs in the order they arrive, so detections sent late after an outage still appear.
+
+Each detection is placed where the unit was when it took the frame. Working out the exact ground position from the camera angle and altitude is not done yet.
 
 Layout
 
@@ -92,8 +101,9 @@ Layout
 - `src/metrics.py` - Precision, recall and mAP against labelled boxes
 - `src/hit_uav.py` - Reads the HIT-UAV labels
 - `dashboard/` - Local web dashboard
-- `command_center/` - Command center API that units sync to
+- `command_center/` - Command center API that units sync to, and the coordinator map page
 - `scripts/simulate_feed.py` - Sends made up or real thermal frames through the pipeline for demos
+- `scripts/demo_units.py` - Flies several demo units at once against a command center
 - `scripts/evaluate_hit_uav.py` - Scores a detector on HIT-UAV
 - `scripts/train_person_check.py` - Trains the person check
 - `scripts/prepare_hit_uav.py` - Makes the person only copy of HIT-UAV for MindYOLO
@@ -138,6 +148,12 @@ python scripts/simulate_feed.py --replay ../datasets/hit-uav/normal_json/test --
 curl -H "Authorization: Bearer pick-a-secret" http://127.0.0.1:8000/api/v1/units
 ```
 
+To watch several units at once, start the command center and open http://127.0.0.1:8000 in a browser, then fly the demo units. Each one is its own process with its own database.
+
+```bash
+NEUSE_SYNC_TOKEN=pick-a-secret python scripts/demo_units.py --frames-dir ../datasets/hit-uav/normal_json/test --units 3
+```
+
 To check the results yourself, clone HIT-UAV outside the project. It is about 1.3 GB.
 
 ```bash
@@ -174,6 +190,7 @@ Settings
 
 - `NEUSE_DETECTOR` - `person-check` by default, or `warm-spots` for the first baseline
 - `NEUSE_DB` - Detection database, defaults to `neuse_local.db` in the project folder
+- `NEUSE_LAT` and `NEUSE_LON` - Unit position when no GPS position is given, defaults to central Nairobi
 - `NEUSE_UNIT_ID` - Name this unit reports to the command center, defaults to `unit-` and the computer's name
 - `NEUSE_SYNC_URL` - Command center address for `python -m src.sync`
 - `NEUSE_SYNC_TOKEN` - Secret the unit sends to the command center

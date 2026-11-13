@@ -28,6 +28,10 @@ class dual_spectral_pipeline:
         self.clahe = cv2.createCLAHE(clipLimit=config.clahe_clip_limit, tileGridSize=(grid, grid))
         # time spent on the last frame in ms
         self.last_latency_ms = None
+        # frames seen, and when the status row was last written
+        self.frames = 0
+        # minus infinity so the first frame always writes one
+        self.last_status = float("-inf")
 
         # pick the detector, the person check needs its trained weights
         self.detector = detector or config.detector
@@ -42,10 +46,11 @@ class dual_spectral_pipeline:
                 log.warning("no weights at %s, using warm-spots", config.person_check_path)
                 self.detector = "warm-spots"
 
-    def process_frames(self, rgb_frame=None, thermal_frame=None):
+    def process_frames(self, rgb_frame=None, thermal_frame=None, position=None):
         # main entry point, called once per pair of camera frames
         # returns a list of detections, empty when nothing is found
         # rgb_frame is accepted now so callers stay the same once rgb fusion is added
+        # position is the unit's latitude and longitude for this frame, the configured one when not given
 
         # time only the detection so the number reflects the detector itself
         start = time.perf_counter()
@@ -54,7 +59,13 @@ class dual_spectral_pipeline:
 
         # only touch the database when something was found
         if hits:
-            self.logger.log_events(hits, self.last_latency_ms)
+            self.logger.log_events(hits, self.last_latency_ms, position)
+
+        # a short status note every few seconds, not every frame, so the disk is not kept busy
+        self.frames += 1
+        if time.monotonic() - self.last_status >= config.status_every:
+            self.logger.note_status(position, self.detector, self.frames)
+            self.last_status = time.monotonic()
         return hits
 
     def _detect(self, thermal_frame, min_score=None):
