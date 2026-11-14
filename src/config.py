@@ -69,6 +69,8 @@ class config:
     mindyolo_path = Path(os.environ.get("NEUSE_MINDYOLO_MODEL", project_root / "models" / "person_mindyolo.ms"))
     # the score a mindyolo box needs to be reported, pick it on the validation images once the model is trained
     mindyolo_threshold = float(os.environ.get("NEUSE_MINDYOLO_THRESHOLD", 0.25))
+    # where mindspore lite runs the model, cpu anywhere or ascend on an ascend npu such as the orange pi aipro
+    mindyolo_device = (os.environ.get("NEUSE_MINDYOLO_DEVICE") or "cpu").lower()
 
     # most warm spots the person check scores in one frame, the warmest are kept
     # real drone frames have a few hundred, the cap keeps a noisy frame from stalling the unit

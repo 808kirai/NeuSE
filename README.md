@@ -277,6 +277,7 @@ Settings
 - `NEUSE_CC_DB` - Command center database, defaults to `command_center.db` in the project folder
 - `NEUSE_CC_DATABASE_URL` - RDS for MySQL in place of the SQLite file, like `mysql://user:password@host:3306/neuse`. Write `@` in the password as `%40`
 - `NEUSE_MINDYOLO_MODEL` and `NEUSE_MINDYOLO_THRESHOLD` - The trained MindYOLO model and the score its boxes need, see `training/README.md`
+- `NEUSE_MINDYOLO_DEVICE` - Where MindSpore Lite runs the model, `cpu` by default or `ascend` on an Ascend NPU such as the Orange Pi AIpro's
 - `NEUSE_CC_HOST` and `NEUSE_CC_PORT` - Command center address, defaults to `127.0.0.1` and `8000`. It will not open to a network with no token set
 - `NEUSE_TILE_URL` and `NEUSE_TILE_CREDIT` - Map background for the coordinator page and the credit line shown for it. Defaults to the public OpenStreetMap tiles
 - `NEUSE_LLM_URL`, `NEUSE_LLM_KEY` and `NEUSE_LLM_MODEL` - Optional OpenAI style chat API for situation reports, the base address ending before `/chat/completions`. Unset, reports come from the template

@@ -1,0 +1,22 @@
+# yolov8s, about 3.5 times the size of yolov8n, for when the 640 and 960 yolov8n runs fall short
+# copy it into configs/yolov8/ next to yolov8s.yaml, see training/README.md
+
+__BASE__: [
+  './yolov8s.yaml',
+]
+
+# the same rounds and data as hit_uav_yolov8n.yaml
+epochs: 200
+per_batch_size: 16
+img_size: 640
+
+data:
+  dataset_name: hit_uav_person
+  train_set: /home/ma-user/work/hit-uav-person/train.txt
+  val_set: /home/ma-user/work/hit-uav-person/val.txt
+  test_set: /home/ma-user/work/hit-uav-person/test.txt
+  nc: 1
+  names: [ 'person' ]
+
+  train_transforms:
+    stage_epochs: [ 190, 10 ]

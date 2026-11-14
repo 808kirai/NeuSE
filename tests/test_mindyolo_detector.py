@@ -17,10 +17,10 @@ from src.mindyolo_detector import letterbox, mindyolo_detector
 from src.pipeline import thermal_pipeline
 
 
-def fake_model(rows):
+def fake_model(rows, size=640):
     # a runner that checks the input it gets and answers with fixed rows
     def run(batch):
-        assert batch.shape == (1, 3, 640, 640) and batch.dtype == np.float32
+        assert batch.shape == (1, 3, size, size) and batch.dtype == np.float32
         assert 0.0 <= batch.min() and batch.max() <= 1.0
         return np.array([rows], np.float32)
     return run
@@ -103,7 +103,8 @@ def test_pipeline_runs_the_mindyolo_detector(isolated_db, monkeypatch, tmp_path)
     model.write_bytes(b"stand in")
     monkeypatch.setattr(config, "mindyolo_path", model)
     monkeypatch.setattr(pipeline_module, "mindyolo_detector",
-                        lambda path, threshold: mindyolo_detector(runner=fake_model([person]), threshold=threshold))
+                        lambda path, threshold, device: mindyolo_detector(runner=fake_model([person]),
+                                                                          threshold=threshold))
     pipe = thermal_pipeline("mindyolo")
     frame = np.full((512, 640), 40, np.uint8)
     frame[100:115, 100:114] = 220
@@ -135,7 +136,52 @@ def test_the_scoring_script_takes_the_mindyolo_threshold(isolated_db, monkeypatc
     monkeypatch.setattr(config, "mindyolo_path", model)
     monkeypatch.setattr(config, "mindyolo_threshold", 0.4)
     monkeypatch.setattr(pipeline_module, "mindyolo_detector",
-                        lambda path, threshold: mindyolo_detector(runner=fake_model([person]), threshold=threshold))
+                        lambda path, threshold, device: mindyolo_detector(runner=fake_model([person]),
+                                                                          threshold=threshold))
     detect, cutoff, name = make_detector("mindyolo")
     assert name == "mindyolo" and cutoff == 0.4
     assert detect(np.zeros((512, 640), np.uint8))[0][1] == pytest.approx(0.9)
+
+
+class fake_lite:
+    # stands in for mindspore lite, recording where the model was asked to run
+    class Context:
+        def __init__(self):
+            self.target = None
+            self.cpu = type("cpu", (), {})()
+            self.ascend = type("ascend", (), {})()
+
+    class ModelType:
+        MINDIR = "mindir"
+        MINDIR_LITE = "mindir_lite"
+
+    class Model:
+        built = []
+
+        def __init__(self):
+            self.input = type("tensor", (), {"shape": [1, 3, 960, 960], "set_data_from_numpy": lambda s, data: None})()
+
+        def build_from_file(self, path, kind, context):
+            fake_lite.Model.built.append((kind, context))
+
+        def get_inputs(self):
+            return [self.input]
+
+        def predict(self, inputs):
+            rows = np.array([[[160.5, 257.25, 21.0, 22.5, 0.9]]], np.float32)
+            return [type("out", (), {"get_data_to_numpy": lambda s: rows})()]
+
+
+@pytest.mark.parametrize("device", ["cpu", "ascend"])
+def test_the_model_runs_where_asked_at_its_own_input_size(monkeypatch, tmp_path, device):
+    monkeypatch.setitem(sys.modules, "mindspore_lite", fake_lite)
+    fake_lite.Model.built = []
+    detector = mindyolo_detector(tmp_path / "person.ms", device=device)
+    kind, context = fake_lite.Model.built[0]
+    assert context.target == [device] and kind == "mindir_lite"
+    if device == "ascend":
+        assert context.ascend.device_id == 0
+    # a model exported at 960 gets a 960 square, with the 640 by 512 frame scaled up 1.5 times
+    assert detector.size == 960
+    box, _ = detector.detect(np.zeros((512, 640), np.uint8))[0]
+    assert box == pytest.approx([100, 100, 14, 15])

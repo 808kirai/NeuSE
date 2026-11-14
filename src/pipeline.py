@@ -67,7 +67,8 @@ class thermal_pipeline:
             try:
                 if not config.mindyolo_path.exists():
                     raise FileNotFoundError(f"no model at {config.mindyolo_path}")
-                self.checker = mindyolo_detector(config.mindyolo_path, config.mindyolo_threshold)
+                self.checker = mindyolo_detector(config.mindyolo_path, config.mindyolo_threshold,
+                                                 device=config.mindyolo_device)
             except (ImportError, OSError, RuntimeError, ValueError) as err:
                 # keep detecting with the person check instead of stopping the unit
                 log.warning("could not load the mindyolo model, using person-check, %s", err)

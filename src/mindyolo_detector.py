@@ -2,7 +2,8 @@
 runs a mindyolo person detector on the unit with mindspore lite
 the model is trained on modelarts and converted to a .ms file, see training/README.md
 
-the input is one 640 by 640 rgb image scaled 0 to 1, made by letterboxing the frame
+the input is one square rgb image scaled 0 to 1, made by letterboxing the frame
+its size, 640 or 960 for example, is read from the model, so it always matches what the model was trained at
 the output, read from mindyolo's yolov8 head, is one row per candidate box
     x centre, y centre, width, height in input pixels, then a score from 0 to 1 for each class
 class 0 is person, a model trained with bicycles as class 1 still reports people only
@@ -35,13 +36,18 @@ def letterbox(gray, size):
     return batch, scale, left, top
 
 
-def lite_runner(path, threads=4):
+def lite_runner(path, threads=4, device="cpu"):
     # loads a .ms or .mindir model with mindspore lite and returns a function that runs one batch
+    # device ascend runs it on an ascend npu, such as the orange pi aipro's, cpu works anywhere
     import mindspore_lite as mslite
 
     context = mslite.Context()
-    context.target = ["cpu"]
-    context.cpu.thread_num = threads
+    if device == "ascend":
+        context.target = ["ascend"]
+        context.ascend.device_id = 0
+    else:
+        context.target = ["cpu"]
+        context.cpu.thread_num = threads
     model = mslite.Model()
     # converted .ms files are mindir lite, older mindspore lite versions name them differently
     kind = getattr(mslite.ModelType, "MINDIR_LITE", mslite.ModelType.MINDIR)
@@ -54,19 +60,23 @@ def lite_runner(path, threads=4):
         inputs[0].set_data_from_numpy(np.ascontiguousarray(batch, dtype=np.float32))
         return model.predict(inputs)[0].get_data_to_numpy()
 
+    # the square input size the model was exported at, from its input shape of 1, 3, size, size
+    shape = list(model.get_inputs()[0].shape)
+    run.size = shape[-1] if len(shape) == 4 and shape[-1] > 0 else None
     return run
 
 
 class mindyolo_detector:
     # finds people in 8 bit thermal frames with a trained mindyolo model
     # runner takes the network input and returns its first output, tests pass their own
-    def __init__(self, path=None, threshold=0.25, overlap=0.6, size=640, runner=None, most=1000):
-        self.runner = runner or lite_runner(path)
+    def __init__(self, path=None, threshold=0.25, overlap=0.6, size=None, runner=None, most=1000, device="cpu"):
+        self.runner = runner or lite_runner(path, device=device)
         # the score a box needs to be reported, set from the validation images once the model is trained
         self.threshold = threshold
         # boxes overlapping more than this are the same person
         self.overlap = overlap
-        self.size = size
+        # the model's own input size when it says, otherwise 640
+        self.size = size or getattr(self.runner, "size", None) or 640
         # most boxes kept before overlaps are removed, the highest scoring ones
         self.most = most
 

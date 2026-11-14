@@ -1,0 +1,10 @@
+# the same yolov8n run with frames scaled up 1.5 times, so a person about 12 by 19 pixels becomes 18 by 28
+# small people are the hard part of hit-uav, and a larger input is the simplest way to give the model more of them
+# it costs about 2.25 times the computing of the 640 run, on modelarts and on the unit
+# copy it into configs/yolov8/ next to hit_uav_yolov8n.yaml, which it builds on
+
+__BASE__: [
+  './hit_uav_yolov8n.yaml',
+]
+
+img_size: 960
