@@ -7,6 +7,7 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
 
 import pytest
 
@@ -25,6 +26,24 @@ def detection(uid, minutes_ago=0, unit="unit-1", detector="person-check"):
 boss = {"Authorization": "Bearer boss-token-long-enough"}
 
 
+class scripts(HTMLParser):
+    # the attributes of every script tag on a page, read by a real html parser
+    def __init__(self, page):
+        super().__init__()
+        self.found = []
+        self.feed(page)
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            self.found.append(dict(attrs))
+
+
+def directives(policy):
+    # a content security policy as a dict of directive name to its set of sources
+    parts = [part.split() for part in policy.split(";") if part.strip()]
+    return {part[0]: set(part[1:]) for part in parts}
+
+
 @pytest.fixture
 def client(tmp_path):
     return create_app(tmp_path / "c.db", token="boss-token-long-enough", unit_tokens={}).test_client()
@@ -36,12 +55,13 @@ def test_the_page_only_runs_its_own_scripts(client):
     reply = client.get("/")
     policy = reply.headers["Content-Security-Policy"]
     nonce = re.search(r"'nonce-([^']+)'", policy).group(1)
-    page = reply.get_data(as_text=True)
     # every inline script carries this request's nonce, and the policy allows nothing else
-    inline = re.findall(r"<script(?![^>]*\bsrc=)([^>]*)>", page)
-    assert inline and all(f'nonce="{nonce}"' in attrs for attrs in inline)
-    assert "frame-ancestors 'none'" in policy and "object-src 'none'" in policy
-    assert "https://tile.openstreetmap.org" in policy
+    inline = [attrs for attrs in scripts(reply.get_data(as_text=True)).found if "src" not in attrs]
+    assert inline and all(attrs.get("nonce") == nonce for attrs in inline)
+    rules = directives(policy)
+    assert rules["frame-ancestors"] == {"'none'"} and rules["object-src"] == {"'none'"}
+    assert rules["script-src"] == {"'self'", f"'nonce-{nonce}'"}
+    assert "https://tile.openstreetmap.org" in rules["img-src"]
     # a new nonce every time
     assert nonce not in client.get("/").headers["Content-Security-Policy"]
 
@@ -256,3 +276,18 @@ def test_control_characters_are_removed_from_a_model_report(monkeypatch, facts):
 
     monkeypatch.setattr(reports.urllib.request, "urlopen", reply)
     assert reports.write_with_model(facts, "https://example.com/v1", "k", "m") == "Area 1 needs attention."
+
+
+def test_a_crafted_path_cannot_forge_a_log_line(client, caplog):
+    with caplog.at_level(logging.INFO, logger="neuse.command_center"):
+        client.get("/api/v1/units%0a2026-11-14 INFO GET /api/v1/units 200 coordinator", headers=boss)
+    lines = [r.getMessage() for r in caplog.records if "/api/v1/units" in r.getMessage()]
+    assert len(lines) == 1 and "\n" not in lines[0] and "\\n" in lines[0]
+
+
+@pytest.mark.parametrize("value, expected", [
+    ("plain", "plain"), ("a\nb", "a\\nb"), ("a\rb", "a\\rb"), ("a\x1bb", "a\\x1bb"),
+    ("x" * 300, "x" * 200),
+])
+def test_log_values_are_kept_to_one_safe_line(value, expected):
+    assert app_module.loggable(value) == expected

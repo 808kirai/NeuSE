@@ -104,6 +104,12 @@ class failures:
             self.seen.setdefault(address, deque(maxlen=self.most)).append(self.clock())
 
 
+def loggable(value, limit=200):
+    # text from a request made safe for one log line, so a crafted path cannot start a fake line
+    text = str(value).replace("\r", "\\r").replace("\n", "\\n")
+    return "".join(c if c.isprintable() else f"\\x{ord(c):02x}" for c in text)[:limit]
+
+
 def token_problem(name, token):
     # why a token is too weak to open the command center to a network, or None when it will do
     if len(token) < min_token_length:
@@ -266,8 +272,9 @@ def create_app(db_path=None, token=None, llm=None, unit_tokens=None, alert_setti
         if request.path.startswith("/api/") and request.path != "/api/v1/health":
             caller = getattr(g, "caller", None)
             name = "coordinator" if caller is True else caller or "refused"
-            log.info("%s %s %s %s from %s in %.0f ms", request.method, request.path, response.status_code, name,
-                     request.remote_addr, (time.perf_counter() - g.started) * 1000)
+            log.info("%s %s %s %s from %s in %.0f ms", loggable(request.method), loggable(request.path),
+                     response.status_code, loggable(name), loggable(request.remote_addr),
+                     (time.perf_counter() - g.started) * 1000)
         return response
 
     def read_body():

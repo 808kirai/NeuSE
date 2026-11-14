@@ -3,8 +3,10 @@ import hashlib
 import json
 import math
 import random
+import re
 import sqlite3
 import sys
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -297,10 +299,17 @@ def test_coordinator_page_serves_its_own_map_library(client):
     assert "if (window.L)" in page and "tileerror" in page
 
 
+def page_tiles(page):
+    # the map background and its credit as the page's script receives them
+    tiles = json.loads(re.search(r"const tiles = (.*?);\n", page).group(1))
+    credit = json.loads(re.search(r"const tilesCredit = (.*?);\n", page).group(1))
+    return urllib.parse.urlsplit(tiles).hostname, credit
+
+
 def test_map_background_can_be_set(tmp_path, monkeypatch):
     monkeypatch.setenv("NEUSE_TILE_URL", "https://tiles.example.org/{z}/{x}/{y}.png")
     page = create_app(tmp_path / "c.db", token="").test_client().get("/").get_data(as_text=True)
-    assert "tiles.example.org" in page and "openstreetmap" not in page.lower()
+    assert page_tiles(page) == ("tiles.example.org", "")
 
 
 # unit side
@@ -491,7 +500,7 @@ def test_empty_settings_from_a_deployment_file_count_as_not_set(tmp_path, monkey
     monkeypatch.setenv("NEUSE_CC_DB", str(tmp_path / "c.db"))
     app = create_app(token="secret")
     page = app.test_client().get("/").get_data(as_text=True)
-    assert "tile.openstreetmap.org" in page and "OpenStreetMap contributors" in page
+    assert page_tiles(page) == ("tile.openstreetmap.org", "© OpenStreetMap contributors")
     assert (tmp_path / "c.db").exists()
     report = app.test_client().get("/api/v1/report", headers={"Authorization": "Bearer secret"}).get_json()
     assert report["source"] == "template"
