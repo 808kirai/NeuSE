@@ -9,14 +9,14 @@ import numpy as np
 # add the project root to the python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.pipeline import dual_spectral_pipeline
+from src.pipeline import thermal_pipeline
 
 # robustness and speed checks written with unittest
 # pytest runs these too and gives them their own test database
 class TestPipelineRobustness(unittest.TestCase):
 
     def setUp(self):
-        self.pipe = dual_spectral_pipeline()
+        self.pipe = thermal_pipeline()
         # warm up the pipeline before testing
         self.pipe.process_frames()
 
@@ -54,8 +54,8 @@ class TestPipelineRobustness(unittest.TestCase):
         self.assertGreaterEqual(len(res), 1)
 
     # measure full stream processing latency
-    # shared ci runners are too noisy for a 15 ms limit so this only runs locally
-    @unittest.skipIf(os.environ.get("CI"), "timing check only runs locally")
+    # speed depends on the computer, so this only runs when asked for with NEUSE_TIMING_TESTS=1
+    @unittest.skipUnless(os.environ.get("NEUSE_TIMING_TESTS"), "timing checks run with NEUSE_TIMING_TESTS=1")
     def test_e2e_stream_latency(self):
         # encode a frame as a compressed stream
         raw_frame = np.zeros((480, 640, 3), dtype=np.uint8)

@@ -5,6 +5,8 @@ each one flies a search pattern, sends real thermal frames through the person ch
 links drop at random, so the map shows units going offline, queueing detections and catching up
 
 the frames are real hit-uav images but the flight paths and link drops are made up
+each frame's height and camera tilt come from its hit-uav file name, so sightings are placed on the ground
+the camera's view angles are not published with the dataset, so those positions are estimates
 
 usage, with the command center running in another terminal
     python scripts/demo_units.py --frames-dir ../datasets/hit-uav/normal_json/test --units 3
@@ -35,9 +37,14 @@ def flight_path(index, units, base, step, area=300.0, spacing=40.0, distance=600
     centre_x, centre_y = distance * math.cos(angle), distance * math.sin(angle)
 
     # how far along the back and forth lines the unit is, 10 m per frame
-    travelled = (step * 10.0) % (area * (area / spacing))
-    line = int(travelled // area)
-    along = travelled % area
+    # at the end of the last line it turns round and flies the same lines back, so it never jumps
+    lines = int(area // spacing) + 1
+    length = area * lines
+    travelled = (step * 10.0) % (2 * length)
+    if travelled > length:
+        travelled = 2 * length - travelled
+    line = min(int(travelled // area), lines - 1)
+    along = travelled - line * area
     x = along if line % 2 == 0 else area - along
     y = line * spacing
 
@@ -45,6 +52,24 @@ def flight_path(index, units, base, step, area=300.0, spacing=40.0, distance=600
     lat = base[0] + north / metres_per_degree
     lon = base[1] + east / (metres_per_degree * math.cos(math.radians(base[0])))
     return lat, lon
+
+
+def flight_heading(index, units, base, step):
+    # the way the unit is facing, in degrees clockwise from north, taken from where it goes next
+    here, there = flight_path(index, units, base, step), flight_path(index, units, base, step + 1)
+    north = there[0] - here[0]
+    east = (there[1] - here[1]) * math.cos(math.radians(base[0]))
+    return math.degrees(math.atan2(east, north)) % 360 if (north or east) else 0.0
+
+
+def frame_pose(image, heading):
+    # height and camera tilt from a hit-uav file name like 1_130_90_0_04077.jpg, None for other names
+    # in the dataset 90 degrees means the camera points straight down
+    try:
+        _, altitude, tilt = Path(image).stem.split("_")[:3]
+        return {"altitude": float(altitude), "heading": heading, "tilt": float(tilt)}
+    except ValueError:
+        return None
 
 
 class link:
@@ -72,14 +97,17 @@ def run_unit(images, index, units, base, send, send_status, radio, frames, fps=1
     # the database and unit name come from config, which the parent sets for each process
     from src import sync
     from src.config import config
-    from src.pipeline import dual_spectral_pipeline
+    from src.pipeline import thermal_pipeline
 
-    pipe = dual_spectral_pipeline()
+    pipe = thermal_pipeline()
     found = 0
     was_up = True
     for step in range(frames):
-        frame = cv2.imread(str(images[step % len(images)]), cv2.IMREAD_GRAYSCALE)
-        found += len(pipe.process_frames(thermal_frame=frame, position=flight_path(index, units, base, step)))
+        image = images[step % len(images)]
+        frame = cv2.imread(str(image), cv2.IMREAD_GRAYSCALE)
+        pose = frame_pose(image, flight_heading(index, units, base, step))
+        found += len(pipe.process_frames(thermal_frame=frame, position=flight_path(index, units, base, step),
+                                         pose=pose))
 
         up = radio.tick()
         if up != was_up:

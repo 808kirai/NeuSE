@@ -122,3 +122,30 @@ def test_evaluate_person_check_uses_its_threshold(dataset):
     assert result["detector"] == "person-check"
     assert 0 < result["cutoff"] < 1
     assert 0.0 <= result["map50"]["all"] <= 1.0
+
+
+def test_bicycles_can_be_kept_as_their_own_class(dataset, tmp_path):
+    # the dataset labels a bike and its rider as one bicycle box, with no person box for the rider
+    path = dataset / "normal_json" / "annotations" / "train.json"
+    data = json.loads(path.read_text())
+    data["annotation"].append({"image_id": 0, "bbox": [400, 100, 20, 30], "category_id": 2, "id": 9})
+    path.write_text(json.dumps(data))
+
+    night = next(r for r in load_split(dataset, "train") if r["time"] == "night")
+    assert night["bicycles"] == [[400, 100, 20, 30]] and [400, 100, 20, 30] in night["others"]
+
+    plain = tmp_path / "plain"
+    prepare(dataset, plain)
+    assert len((plain / "labels" / "train" / "1_60_90_0_00001.txt").read_text().splitlines()) == 1
+    assert "nc: 1" in (plain / "hit_uav_person.yaml").read_text()
+
+    both = tmp_path / "both"
+    prepare(dataset, both, with_bicycles=True)
+    lines = (both / "labels" / "train" / "1_60_90_0_00001.txt").read_text().splitlines()
+    assert [line.split()[0] for line in lines] == ["0", "1"]
+    assert "nc: 2" in (both / "hit_uav_person.yaml").read_text()
+
+
+def test_scoring_does_not_create_a_database_where_the_unit_keeps_its_own(dataset, isolated_db):
+    evaluate(load_split(dataset, "test"), min_blob_area=60)
+    assert not isolated_db.exists()

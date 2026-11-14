@@ -87,6 +87,32 @@ def test_template_report_says_what_matters(db):
     assert "people found" not in text
 
 
+def test_report_says_when_a_unit_is_in_contact_but_not_searching(db):
+    # unit-1 still syncs, but its detector last handled a frame 20 minutes before its last note
+    with store.connect(db) as conn:
+        conn.execute("update units set detector_idle_s = 1200, refused = 3 where unit_id = 'unit-1'")
+    facts = reports.gather(db, minutes=30, now=now)
+    unit = next(u for u in facts["units"] if u["unit_id"] == "unit-1")
+    assert unit["online"] is True and unit["detecting"] is False and unit["detector_quiet_minutes"] == 20
+    text = reports.write_template(facts)
+    assert "unit-1 is in contact but its detector has been quiet for 20 min" in text
+    assert "unit-1 holds 3 sightings the command center refused" in text
+
+
+def test_report_says_when_sightings_are_only_placed_at_the_unit(db):
+    text = reports.write_template(reports.gather(db, minutes=30, now=now))
+    assert "3 sightings could only be placed at the unit's own position" in text
+    with store.connect(db) as conn:
+        conn.execute("update detections set position_source = 'projected'")
+    assert "placed at the unit" not in reports.write_template(reports.gather(db, minutes=30, now=now))
+
+
+def test_language_model_gets_a_short_list_of_areas():
+    facts = {"areas": [{"n": i} for i in range(50)], "sightings": 50}
+    trimmed = reports.for_model(facts)
+    assert len(trimmed["areas"]) == reports.model_areas and trimmed["areas_not_listed"] == 30
+
+
 def test_template_report_with_nothing_seen(tmp_path):
     path = tmp_path / "empty.db"
     store.setup(path)
@@ -135,7 +161,7 @@ def test_model_writes_the_report_from_the_facts(db, model_url):
     assert path == "/v1/chat/completions" and auth == "Bearer key-1" and body["model"] == "model-x"
     # the model is told not to count people and only gets the measured facts
     assert "never turn sightings into a count of people" in body["messages"][0]["content"]
-    assert json.loads(body["messages"][1]["content"]) == result["facts"]
+    assert json.loads(body["messages"][1]["content"]) == reports.for_model(result["facts"])
 
 
 @pytest.mark.parametrize("status, reply", [
