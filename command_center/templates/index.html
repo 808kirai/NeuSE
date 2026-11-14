@@ -206,7 +206,7 @@
             </div>
             <h2>Alerts</h2>
             <div id="alerts"><div class="empty">No alerts in the last 24 hours.</div></div>
-            <div id="alerts-note" class="meta"></div>
+            <div id="alerts-note" class="empty"></div>
             <h2>Situation report</h2>
             <div class="report">
                 <div class="report-controls">
@@ -449,7 +449,8 @@
             const list = document.getElementById('alerts');
             list.replaceChildren();
             if (!data.alerts.length) list.append(el('div', 'empty', 'No alerts in the last 24 hours.'));
-            for (const alert of data.alerts.slice(0, 10)) {
+            // the newest few are listed, every alert stays as a ring on the map
+            for (const alert of data.alerts.slice(0, 5)) {
                 const card = el('div', 'hit');
                 card.append(el('div', 'unit-name', alert.sightings + ' strong sightings near ' +
                     alert.latitude.toFixed(5) + ', ' + alert.longitude.toFixed(5)));
@@ -458,12 +459,18 @@
                 else if (alert.delivered) card.append(el('div', 'meta', 'Text sent'));
                 card.addEventListener('click', () => lookAt(alert.latitude, alert.longitude, 18));
                 list.append(card);
-                if (map && !alertMarkers.has(alert.id)) {
-                    const ring = L.circle([alert.latitude, alert.longitude],
-                        { radius: 100, weight: 3, fill: false, color: ageColour(alert.created_at) }).addTo(map);
+            }
+            if (data.alerts.length > 5) list.append(el('div', 'empty', (data.alerts.length - 5) + ' earlier alerts are marked on the map.'));
+            for (const alert of data.alerts) {
+                if (!map) break;
+                let ring = alertMarkers.get(alert.id);
+                if (!ring) {
+                    ring = L.circle([alert.latitude, alert.longitude], { radius: 100, weight: 3, dashArray: '8 6', fill: false }).addTo(map);
                     ring.bindTooltip(plain('Alert, ' + alert.sightings + ' strong sightings'));
                     alertMarkers.set(alert.id, ring);
                 }
+                // colours age as time passes, the same as sightings
+                ring.setStyle({ color: ageColour(alert.created_at) });
             }
             document.getElementById('alerts-note').textContent = textNote(data);
         }

@@ -72,6 +72,7 @@ def gather(db, minutes=30, now=None, online_window=60, detecting_window=30):
     covered = store.coverage(db, start)
     side = store.cell_degrees * metres_per_degree
     searched_m2 = sum(side * side * math.cos(math.radians((c["cell_row"] + 0.5) * store.cell_degrees)) for c in covered)
+    raised = [a for a in store.alerts(db, start, limit=10000) if a["created_at"] <= now.isoformat()]
 
     units = []
     for unit in store.units(db):
@@ -118,6 +119,9 @@ def gather(db, minutes=30, now=None, online_window=60, detecting_window=30):
         "sightings": len(sightings),
         # ground the units' cameras covered in the window, worked out from their height, heading and tilt
         "searched_km2": round(searched_m2 / 1e6, 3),
+        # alerts raised in the window and how many went out as texts, see command_center/alerts.py
+        "alerts": len(raised),
+        "alert_texts_sent": sum(1 for a in raised if a["delivered"]),
         # sightings placed at the unit itself because it gave no height, heading and camera tilt
         # the person can be a few hundred metres from such a position
         "sightings_placed_at_unit": sum(1 for s in sightings if s["position_source"] != "projected"),
@@ -154,6 +158,10 @@ def write_template(facts):
         lines.append(f"About {facts['searched_km2']:.2f} square km searched in this window. "
                      "Ground outside the shaded squares on the map has not been covered.")
 
+    if facts["alerts"]:
+        sent = f", {facts['alert_texts_sent']} sent by text" if facts["alert_texts_sent"] else ""
+        lines.append(f"{count(facts['alerts'], 'alert')} raised for areas with several strong sightings{sent}.")
+
     if not facts["areas"]:
         lines.append("No sightings of people in this window.")
         return "\n".join(lines)
@@ -186,7 +194,7 @@ instructions = (
     "Start with what needs attention first, such as recent areas with many sightings, silent units with "
     "sightings still waiting to send, units in contact whose detector has stopped and units holding refused "
     "sightings. Say so when sightings are only placed at the unit's own position. "
-    "Say how much ground was searched when searched_km2 is above 0. "
+    "Say how much ground was searched when searched_km2 is above 0, and how many alerts were raised when alerts is above 0. "
     "Give coordinates as they appear. Use plain sentences, at most 150 words."
 )
 

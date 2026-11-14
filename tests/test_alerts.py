@@ -225,3 +225,12 @@ def test_bad_alert_windows_are_refused(tmp_path, monkeypatch, hours):
 def test_the_map_page_has_the_alerts_list(tmp_path, monkeypatch):
     page = center(tmp_path, monkeypatch).get("/").get_data(as_text=True)
     assert 'id="alerts"' in page and "/api/v1/alerts" in page
+
+
+def test_reports_count_the_alerts_raised(db):
+    from command_center import reports
+    store.save(db, [detection(u) for u in uids(0, 3)])
+    alerts.check(db, defaults, fake_sender())
+    facts = reports.gather(db, minutes=30)
+    assert facts["alerts"] == 1 and facts["alert_texts_sent"] == 1
+    assert "1 alert raised for areas with several strong sightings, 1 sent by text." in reports.write_template(facts)
