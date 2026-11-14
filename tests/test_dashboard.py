@@ -88,3 +88,15 @@ def test_refused_detections_show_on_the_dashboard():
         conn.execute("update detections set sync_error = 'bad box'")
     body = load_dashboard().app.test_client().get("/api/telemetry").get_json()
     assert body["refused"] == 1 and body["queued"] == 0
+
+
+def test_the_dashboard_sends_protective_headers(isolated_db):
+    reply = load_dashboard().app.test_client().get("/api/telemetry")
+    assert reply.headers["X-Frame-Options"] == "DENY" and reply.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.parametrize("host, debug, ok", [
+    ("127.0.0.1", True, True), ("0.0.0.0", False, True), ("0.0.0.0", True, False), ("192.168.1.5", True, False),
+])
+def test_the_debugger_never_answers_other_computers(host, debug, ok):
+    assert (load_dashboard().debug_problem(host, debug) is None) == ok

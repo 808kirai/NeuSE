@@ -35,6 +35,12 @@ many field units -> /api/v1/detections, /api/v1/status, /api/v1/coverage -> comm
 - Storage, `command_center/store.py` - Keeps each detection id once, so units can safely resend, and numbers detections in the order they arrive. Works on an SQLite file or on RDS for MySQL, chosen with `NEUSE_CC_DATABASE_URL`, and is checked against MySQL 8.0 on every push.
 - Deployment, `deploy/` and `docs/DEPLOY.md` - A Docker image for the command center and Caddy in front of it for HTTPS, for one Huawei Cloud ECS server with RDS for MySQL. The image is built and tried on every push.
 
+Safety and security, built
+
+- Field unit - Blind frames mark no ground as searched and show the unit as not searching. Model files are checked against `models/checksums.txt` by `src/integrity.py` before loading, with a fallback to a detector the unit can trust.
+- Command center - Weak tokens refused at start, wrong token attempts limited per caller, protective headers and a content security policy with a nonce per request, an access log without tokens, plain names only from units, checks on the language model's report and HTTPS only to the model, and removal of old records with `NEUSE_CC_KEEP_DAYS`.
+- Repository - pip-audit in CI, CodeQL code scanning, Dependabot and a read only CI token. The full threat model is in `docs/SAFETY.md`.
+
 Planned
 
 - Training - A MindYOLO person detector trained on Huawei Cloud ModelArts with the HIT-UAV thermal drone dataset, then exported to MindIR. Three runs are planned, yolov8n at 640 and at 960 for small people, and yolov8s, picked on the validation images. The configs and guide are in `training/`.

@@ -349,8 +349,8 @@ def problem(d):
     box = d.get("bbox")
     if box is not None and not (isinstance(box, list) and len(box) == 4 and all(number(v, -1e9, 1e9) for v in box)):
         return "bbox must be empty or four numbers"
-    if d.get("detector") is not None and not (isinstance(d["detector"], str) and len(d["detector"]) <= 64):
-        return "detector must be empty or a short name"
+    if d.get("detector") is not None and not (isinstance(d["detector"], str) and unit_pattern.match(d["detector"])):
+        return "detector must be empty or a short name of letters, digits, dots, dashes or underscores"
     if d.get("position_source") is not None and d["position_source"] not in position_sources:
         return "position_source must be empty, unit or projected"
     return None
@@ -415,8 +415,9 @@ def status_problem(note):
             return f"{name} must be empty or a whole number"
     if note.get("detector_idle_s") is not None and not number(note["detector_idle_s"], 0, 1e12):
         return "detector_idle_s must be empty or a positive number"
-    if note.get("detector") is not None and not (isinstance(note["detector"], str) and len(note["detector"]) <= 64):
-        return "detector must be empty or a short name"
+    # names reach the page, reports and the language model, so only plain names are kept
+    if note.get("detector") is not None and not (isinstance(note["detector"], str) and unit_pattern.match(note["detector"])):
+        return "detector must be empty or a short name of letters, digits, dots, dashes or underscores"
     return None
 
 
@@ -620,6 +621,19 @@ def alerts(db, since=None, limit=200):
         row["units"] = json.loads(row["units"])
         row["delivered"] = bool(row["delivered"])
     return rows
+
+
+def prune(db, before):
+    # removes sightings, searched squares and alerts older than a time, returns how many rows went
+    # sightings show where people were, so they are not kept longer than a search needs them
+    removed = 0
+    with session(db) as s:
+        for sql in ("delete from detections where timestamp_utc < ? and received_at < ?",
+                    "delete from coverage where last_seen < ?",
+                    "delete from alerts where created_at < ?"):
+            params = (before, before) if sql.count("?") == 2 else (before,)
+            removed += s.run(sql, params).rowcount
+    return removed
 
 
 def count(db):

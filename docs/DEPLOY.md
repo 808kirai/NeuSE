@@ -115,6 +115,16 @@ The command center raises an alert when one area, sightings within 100 m of each
 
 Restart with `sudo docker compose up -d`. The alerts list on the map says whether texts are going out, and an alert whose text failed shows why. Text messages are charged per message, so check the SMN price for your region.
 
+10. Security
+
+- The command center will not start with a token shorter than 16 characters or one still holding the example value. Make each with `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+- A caller that gives 20 wrong tokens in 5 minutes is turned away for the rest of that window. The Docker setup passes on each caller's own address from Caddy, so one caller cannot lock out the others
+- Every API request is logged with who made it, without the token. Read the log with `sudo docker compose logs command-center`
+- Set `NEUSE_CC_KEEP_DAYS` in `.env` to remove old sightings, searched ground and alerts once a search is over
+- To revoke a lost unit, remove its entry from `NEUSE_CC_UNIT_TOKENS` and restart with `sudo docker compose up -d`
+- Open only ports 80 and 443 in the security group, keep RDS on the private network, and give the SMN access key to an IAM user that can only publish
+- `docs/SAFETY.md` has the full list of measures and the risks that remain
+
 Updating
 
 ```bash

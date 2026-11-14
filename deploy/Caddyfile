@@ -1,5 +1,7 @@
 # https in front of the command center
 # caddy asks let's encrypt for a certificate for the domain and renews it by itself
 {$NEUSE_DOMAIN} {
+	# browsers remember to use https for this address, so a token is never sent in the clear
+	header Strict-Transport-Security "max-age=31536000"
 	reverse_proxy command-center:8000
 }

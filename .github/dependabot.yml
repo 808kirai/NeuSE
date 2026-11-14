@@ -1,0 +1,20 @@
+# asks github to propose updates when a pinned package, action or base image has a newer release
+# security updates come through the same way, each one is checked by the tests before it is merged
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /command_center
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule:
+      interval: weekly

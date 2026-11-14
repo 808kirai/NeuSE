@@ -26,6 +26,7 @@ Working now
 - Alerts for coordinators when an area gets several strong sightings, with text messages through Huawei Cloud SMN when it is set up
 - Correction of unit clocks, so a field computer with a wrong clock does not put sightings in the wrong hour
 - Separate tokens for coordinators and for each unit, so a lost unit cannot read where people are
+- AI safety and security measures, set out in `docs/SAFETY.md`. A blind camera never marks ground as searched, model files are checked before they are trusted, a language model's report is checked against the facts, and the command center slows down token guessing, sends protective headers, logs who asked for what and can remove old records
 - Situation reports for coordinators in plain words, written from a template with no network needed, or by a language model when one is set up
 - A demo that flies several units at once on search patterns, with real thermal frames and random link drops
 - A local dashboard showing logged detections, how many still wait to be sent and how many were refused
@@ -163,11 +164,24 @@ Alerts
 
 The command center raises an alert when at least 3 sightings in one area, each with a confidence of 0.8 or more, reach it within 10 minutes. It counts by when sightings arrive, so a unit that was out of range still raises an alert when its backlog comes in. Sightings more than 2 hours old are left out, and the text says when the people were seen. Alerts show in a list and as rings on the coordinator page. With Huawei Cloud Simple Message Notification set up, each alert also goes out as a text message, which reaches a phone on any network. An area that was just alerted stays quiet for 30 minutes. If a text fails, the alert is still kept and the page shows why. See `docs/DEPLOY.md` step 9.
 
+Safety and security
+
+NeuSE helps decide where rescuers look, and its data shows where people are. `docs/SAFETY.md` sets out the threats, the measures and the risks that remain, following the OWASP Top 10 for LLM applications, the OWASP machine learning top 10, the NIST AI Risk Management Framework and Kenya's Data Protection Act. In short
+
+- A missing, flat or saturated frame never marks ground as searched, and the unit shows as not searching while its camera is blind
+- Each model file's SHA-256 is checked before loading. A changed or damaged file is refused and the unit falls back to a detector it can trust
+- Units can only send plain names, so nothing in the data can steer the language model. Every number in a model's report must come from the facts, and a report that counts people is refused. The facts only go to a model over HTTPS
+- The command center will not open to a network with a weak token, turns away a caller after 20 wrong tokens in 5 minutes, sends headers and a content security policy that stop the page being framed or running other scripts, and logs every API request without its token
+- `NEUSE_CC_KEEP_DAYS` removes old sightings, searched ground and alerts
+- CI audits every package for known vulnerabilities, CodeQL scans the code and Dependabot proposes updates. The audit found two vulnerable packages pinned by Huawei Cloud's SMN SDK, which are now replaced by fixed releases
+- Report security problems privately, see `SECURITY.md`
+
 Layout
 
 - `src/pipeline.py` - Thermal detection, choosing between the detectors, and the ground covered
 - `src/person_check.py` - The person check
 - `src/person_cnn.py` - Runs the MindSpore trained person CNN with NumPy
+- `src/integrity.py` - Checks each model file against its recorded SHA-256 before it is loaded
 - `src/geo.py` - Places a sighting on the ground from the unit's height, heading and camera tilt, and works out the ground each frame covers
 - `src/logger.py` - Local detection log in SQLite, which doubles as the queue of detections to send
 - `src/sync.py` - Store and forward sync to the command center
@@ -190,6 +204,8 @@ Layout
 - `tests/` - Automated tests
 - `docs/ARCHITECTURE.md` - How the parts fit together
 - `docs/DEPLOY.md` - Step by step deployment on Huawei Cloud
+- `docs/SAFETY.md` - AI safety and security, the threats, measures and remaining risks
+- `SECURITY.md` - How to report a security problem
 - `docs/PROGRESS.md` - Dated record of what was built, measured and decided
 
 Run it
@@ -298,6 +314,8 @@ Settings
 - `NEUSE_CC_DB` - Command center database, defaults to `command_center.db` in the project folder
 - `NEUSE_CC_DATABASE_URL` - RDS for MySQL in place of the SQLite file, like `mysql://user:password@host:3306/neuse`. Write `@` in the password as `%40`
 - `NEUSE_MINDYOLO_MODEL` and `NEUSE_MINDYOLO_THRESHOLD` - The trained MindYOLO model and the score its boxes need, see `training/README.md`
+- `NEUSE_MINDYOLO_SHA256` - The MindYOLO model's SHA-256, checked before it is loaded. Or add it to `models/checksums.txt`
+- `NEUSE_MIN_FRAME_SPREAD` - Frames whose brightness spreads less than this many grey levels are blind and mark no ground as searched. Defaults to `2`
 - `NEUSE_MINDYOLO_DEVICE` - Where MindSpore Lite runs the model, `cpu` by default or `ascend` on an Ascend NPU such as the Orange Pi AIpro's
 - `NEUSE_CC_HOST` and `NEUSE_CC_PORT` - Command center address, defaults to `127.0.0.1` and `8000`. It will not open to a network with no token set
 - `NEUSE_TILE_URL` and `NEUSE_TILE_CREDIT` - Map background for the coordinator page and the credit line shown for it. Defaults to the public OpenStreetMap tiles
@@ -305,6 +323,9 @@ Settings
 - `NEUSE_SMN_TOPIC_URN`, `NEUSE_SMN_REGION`, `NEUSE_SMN_PROJECT_ID`, `CLOUD_SDK_AK` and `CLOUD_SDK_SK` - Optional text alerts through Huawei Cloud SMN. Unset, alerts only show on the map
 - `NEUSE_ALERT_MIN_SIGHTINGS`, `NEUSE_ALERT_MIN_CONFIDENCE`, `NEUSE_ALERT_WINDOW_MINUTES`, `NEUSE_ALERT_QUIET_MINUTES` and `NEUSE_ALERT_MAX_AGE_MINUTES` - When alerts are raised, defaults `3`, `0.8`, `10`, `30` and `120`
 - `NEUSE_PUBLIC_URL` - The command center's public address, added to alert texts
+- `NEUSE_SMN_ENDPOINT` - An SMN address of its own, such as a private VPC endpoint. Unset, the region's public address is used
+- `NEUSE_CC_KEEP_DAYS` - Days the command center keeps sightings, searched ground and alerts. Defaults to `0`, which keeps them
+- `NEUSE_CC_TRUST_PROXY` - Set to `1` behind a proxy such as Caddy, so each caller's own address is used to slow down token guessing. The Docker setup sets it
 - `NEUSE_HOST` - Defaults to `127.0.0.1`, set to `0.0.0.0` to open the unit dashboard to other devices. It has no token, so only do this on a network you trust
 - `NEUSE_PORT` - Dashboard port, defaults to `5000`
 - `NEUSE_DEBUG` - Off by default, set to `1` for Flask debug mode on a trusted dev machine only

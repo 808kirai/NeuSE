@@ -1,0 +1,6 @@
+# sends alert texts through huawei cloud smn, only used when NEUSE_SMN_TOPIC_URN and its keys are set
+# install with  pip install --no-deps -r command_center/requirements-smn.txt  after requirements.txt
+# the sdk pins pymongo 4.18.2 and pyasn1 0.6.3 or older, which have known vulnerabilities, so its pins are skipped
+# and the fixed versions in requirements.txt are used, checked by publishing through the sdk to a test server
+huaweicloudsdksmn==3.1.222
+huaweicloudsdkcore==3.1.222

@@ -46,6 +46,23 @@ def fetch_telemetry(limit=15):
     return [dict(r) for r in rows], total, queued, refused, status
 
 
+@app.after_request
+def harden(response):
+    # stops the page being framed by another site or its replies being cached or read as another type
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def debug_problem(host, debug):
+    # flask's debugger runs any code it is sent, so it must never answer other computers
+    if debug and host not in ("127.0.0.1", "localhost", "::1"):
+        return "NEUSE_DEBUG=1 is only allowed with NEUSE_HOST=127.0.0.1, the debugger would let anyone run code"
+    return None
+
+
 @app.route("/")
 def index():
     # serve the dashboard page
@@ -79,8 +96,9 @@ if __name__ == "__main__":
     # local only by default
     # set NEUSE_HOST=0.0.0.0 to open it to the network
     # set NEUSE_DEBUG=1 only on a trusted dev machine
-    app.run(
-        host=os.environ.get("NEUSE_HOST", "127.0.0.1"),
-        port=int(os.environ.get("NEUSE_PORT", "5000")),
-        debug=os.environ.get("NEUSE_DEBUG") == "1",
-    )
+    host = os.environ.get("NEUSE_HOST", "127.0.0.1")
+    debug = os.environ.get("NEUSE_DEBUG") == "1"
+    problem = debug_problem(host, debug)
+    if problem:
+        raise SystemExit(problem)
+    app.run(host=host, port=int(os.environ.get("NEUSE_PORT", "5000")), debug=debug)

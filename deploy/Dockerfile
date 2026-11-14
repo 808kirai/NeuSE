@@ -4,8 +4,9 @@
 FROM python:3.12.16-slim
 
 WORKDIR /app
-COPY command_center/requirements.txt /app/command_center/requirements.txt
-RUN pip install --no-cache-dir -r /app/command_center/requirements.txt
+COPY command_center/requirements.txt command_center/requirements-smn.txt /app/command_center/
+# the smn sdk goes in without its own pins, which hold back two packages with known vulnerabilities
+RUN pip install --no-cache-dir -r /app/command_center/requirements.txt     && pip install --no-cache-dir --no-deps -r /app/command_center/requirements-smn.txt
 
 COPY command_center /app/command_center
 

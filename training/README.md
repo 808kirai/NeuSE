@@ -91,6 +91,14 @@ NEUSE_DETECTOR=mindyolo python scripts/simulate_feed.py --replay ../datasets/hit
 
 The unit reads the input size from the model, so a model trained at 960 gets 960 by 960 frames without any setting.
 
+Record the model's checksum on a computer you trust, so every unit can check it has the right file before loading it.
+
+```bash
+python -c "from src.integrity import record; record('models/person_mindyolo.ms')"
+```
+
+Copy `models/checksums.txt` to the units with the model, or set `NEUSE_MINDYOLO_SHA256` on each unit. A unit refuses a model that does not match and keeps detecting with the person check.
+
 On the Orange Pi AIpro, set `NEUSE_MINDYOLO_DEVICE=ascend` to run the model on its Ascend NPU instead of the CPU. MindSpore Lite needs the model converted for Ascend, by adding `--optimize=ascend_oriented` to the conversion in step 5, on a computer with the same CANN version as the board. MindSpore Lite's Ascend documents list the 310P chip but not the 310B in the Orange Pi AIpro, so check this on the board first. If it does not work there, convert the model with the board's own CANN tools.
 
 If the model file or MindSpore Lite is missing, the unit warns and keeps detecting with the person check. If the model's output is not the shape the slot expects, it says so. The slot accepts boxes listed either way round.

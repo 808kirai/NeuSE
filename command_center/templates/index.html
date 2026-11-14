@@ -237,7 +237,7 @@
         </form>
     </div>
 
-    <script>
+    <script nonce="{{ nonce }}">
         // map background, set on the server
         const tiles = {{ tiles|tojson }};
         const tilesCredit = {{ tiles_credit|tojson }};

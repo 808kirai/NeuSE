@@ -8,6 +8,8 @@ Training it again on the same computer gives exactly the same network weights. O
 
 The same training writes `person_cnn.mindir`, the network exported for MindSpore Lite with an input of one crop. It is 370 KB and kept out of git like other exported models, since it is made again by each training run.
 
+`checksums.txt` holds the SHA-256 of each trained model. The training scripts write it, and the unit checks a model against it before loading. A changed or damaged model is refused, and the unit falls back to a detector it can trust. After training a model anywhere else, such as the MindYOLO model on ModelArts, add it with `python -c "from src.integrity import record; record('models/person_mindyolo.ms')"`. See `docs/SAFETY.md`.
+
 Other trained model files are kept out of git. Files ending in `.mindir` and `.ms` are ignored.
 
 The plan is to train a MindYOLO person detector on Huawei Cloud ModelArts with the HIT-UAV thermal dataset, convert it to MindSpore Lite format and place it here as `person_mindyolo.ms`. It has to beat the person check to replace it. The steps are in `training/README.md`.

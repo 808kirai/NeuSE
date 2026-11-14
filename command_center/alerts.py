@@ -45,6 +45,8 @@ class settings:
         self.project_id = env.get("NEUSE_SMN_PROJECT_ID") or ""
         self.access_key = env.get("CLOUD_SDK_AK") or ""
         self.secret_key = env.get("CLOUD_SDK_SK") or ""
+        # an smn address of its own, such as a private vpc endpoint, the region's public address when empty
+        self.endpoint = env.get("NEUSE_SMN_ENDPOINT") or ""
 
     def texts_on(self):
         return all((self.topic_urn, self.region, self.project_id, self.access_key, self.secret_key))
@@ -57,9 +59,14 @@ def smn_sender(config):
     from huaweicloudsdksmn.v2 import PublishMessageRequest, PublishMessageRequestBody, SmnClient
     from huaweicloudsdksmn.v2.region.smn_region import SmnRegion
 
+    if config.endpoint:
+        from huaweicloudsdkcore.region.region import Region
+        region = Region(config.region, config.endpoint)
+    else:
+        region = SmnRegion.value_of(config.region)
     client = (SmnClient.new_builder()
               .with_credentials(BasicCredentials(config.access_key, config.secret_key, config.project_id))
-              .with_region(SmnRegion.value_of(config.region))
+              .with_region(region)
               .build())
 
     def send(subject, text):

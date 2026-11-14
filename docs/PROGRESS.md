@@ -199,3 +199,23 @@ Next
 
 - Command center on Huawei Cloud ECS with RDS, behind HTTPS, with SMN texts
 - MindYOLO training on ModelArts, then MindSpore Lite on the unit and on the Orange Pi AIpro
+
+2026-11-14 - AI safety and security
+
+Researched against the OWASP Top 10 for LLM applications 2025, the OWASP machine learning top 10, the NIST AI Risk Management Framework and Kenya's Data Protection Act 2019, then built and tested. Everything is in `docs/SAFETY.md`.
+
+- A blind camera never marks ground as searched. Before this, a lens cap or failed sensor still shaded ground as searched, the worst kind of failure for a search tool. Frames that spread less than 2 grey levels are blind, against 11 for the flattest real HIT-UAV frame, and the unit shows as not searching while they last
+- Model files are checked against their SHA-256 in `models/checksums.txt` before loading, with a fallback to a detector the unit can trust. This also fixed damaged person check weights crashing the unit
+- Units can only send plain detector names, closing a way to put instructions into the language model's input
+- A language model's report is checked against the facts, every number must come from them and a report counting people is refused, and the facts only go to a model over HTTPS
+- The command center refuses weak tokens on a network, turns away a caller after 20 wrong tokens in 5 minutes, sends protective headers and a content security policy, logs every API request without its token, and removes old records with `NEUSE_CC_KEEP_DAYS`
+- The unit dashboard refuses to run Flask's debugger on a network address, since the debugger runs any code it is sent
+- CI now audits every installed package with pip-audit. Its first run found known vulnerabilities in pymongo 4.18.2 and pyasn1 0.6.3, both pinned by Huawei Cloud's SMN SDK even in its newest release. The SDK is now installed without its pins, with the fixed pymongo 4.18.3 and pyasn1 0.6.5, and publishing through it to a test server was checked
+- CodeQL code scanning, Dependabot, a read only CI token, HSTS from Caddy, and `SECURITY.md` for private reports
+
+Decision - When an address is turned away for guessing tokens, even a right token is refused until the window passes, so a lucky guess tells the guesser nothing. Units see this as a dropped link and keep their sightings.
+
+Decision - Records are kept by default on both the unit and the command center, since how long a search needs them is for the team to decide. The settings to remove them are documented for the end of a search.
+
+Decision - Physical attacks that hide people from thermal cameras are not defended against. NeuSE is for finding people who want to be found, and the remaining risk is written down instead of hidden.
+

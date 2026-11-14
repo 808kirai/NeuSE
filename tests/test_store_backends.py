@@ -150,3 +150,16 @@ def test_alerts_are_kept_and_read_back(db):
     rows = store.alerts(db, since="2026-11-14T09:30:00+00:00")
     assert len(rows) == 1 and rows[0]["units"] == ["unit-1", "unit-2"] and rows[0]["delivered"] is True
     assert len(store.alerts(db)) == 2
+
+
+def test_old_records_are_pruned(db):
+    old = datetime.now(timezone.utc) - timedelta(days=10)
+    store.save(db, [detection("f" * 32, minutes_ago=60 * 24 * 10)], now=old)
+    store.save(db, [detection("e" * 32)])
+    store.save_coverage(db, "unit-1", [[1, 2, old.isoformat(timespec="seconds")]], now=old)
+    store.save_alert(db, {"created_at": old.isoformat(timespec="seconds"), "latitude": -1.28, "longitude": 36.8,
+                          "sightings": 3, "units": ["unit-1"], "highest_confidence": 0.9, "text": "old",
+                          "sent_via": None, "delivered": 0, "error": None})
+    before = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat(timespec="seconds")
+    assert store.prune(db, before) == 3
+    assert [d["uid"] for d in store.recent(db)] == ["e" * 32] and store.coverage(db) == [] and store.alerts(db) == []
