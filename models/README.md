@@ -4,6 +4,10 @@ Models
 
 Training it again on the same computer gives exactly the same network weights. Other computers can differ in the last decimal places, since they add numbers up in a different order.
 
+`person_cnn.npz` holds the person CNN in `src/person_cnn.py`. It is 360 KB, trained with MindSpore by `scripts/train_person_cnn.py` and kept in git for the same reason. It holds the network weights, the box sizes the network's box numbers are measured against, the calibration and the confidence a hit needs, both fitted on the validation images, and a layout number. The unit refuses weights with a layout number it does not know, since they would give wrong answers without any error.
+
+The same training writes `person_cnn.mindir`, the network exported for MindSpore Lite with an input of one crop. It is 370 KB and kept out of git like other exported models, since it is made again by each training run.
+
 Other trained model files are kept out of git. Files ending in `.mindir` and `.ms` are ignored.
 
 The plan is to train a MindYOLO person detector on Huawei Cloud ModelArts with the HIT-UAV thermal dataset, convert it to MindSpore Lite format and place it here as `person_mindyolo.ms`. It has to beat the person check to replace it. The steps are in `training/README.md`.

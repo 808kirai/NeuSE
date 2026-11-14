@@ -168,3 +168,32 @@ Next
 
 - Command center on Huawei Cloud ECS with RDS, behind HTTPS
 - MindYOLO training on ModelArts once access is ready, then MindSpore Lite on the unit
+
+2026-11-14 - A stronger second baseline, searched ground, alerts and a plan for MindYOLO
+
+Built while the team waits for Huawei Cloud access and the Orange Pi AIpro.
+
+- A person CNN trained with MindSpore on the laptop CPU, in about 20 minutes, and exported to MindIR. It finds warm spots at two sizes, which reach 96.7% of labelled people against 93.4% for one size, and looks at a 32 by 32 crop of the frame and its warm spot map around each one. On the unit it runs in NumPy and agrees with MindSpore to 3.8 in a million
+- The searched ground. Each unit works out the ground each frame covers and marks squares of about 22 m as searched. They sync to the command center, are shaded on the map for the last 24 hours and counted in reports in square km
+- Alerts when an area gets 3 sightings of confidence 0.8 or more within 10 minutes, kept and shown on the map, and sent as text messages through Huawei Cloud SMN when it is set up. They count sightings by when they arrive, so a unit that was out of range still raises an alert when its backlog comes in. Checked against the real SMN SDK, which takes the request as built
+- Three MindYOLO runs planned from published results, yolov8n at 640, yolov8n at 960 for small people and yolov8s, with the reasons in `training/README.md`. The MindYOLO slot now reads the input size from the model and can run on an Ascend NPU
+- Detections are indexed by arrival time, which the alerts look them up by
+
+Results on the HIT-UAV test images, scored once after picking on the validation images
+
+- Person check - mAP@0.5 0.670, 79% of hits are people, 65% of people found, about 30 ms per image
+- Person CNN - mAP@0.5 0.659, 71% of hits are people, 67% of people found, about 100 ms per image
+- On the validation images, 0.643 for the person check and 0.625 for the CNN
+
+Decision - The person check stays the default. The CNN finds slightly more people but makes more false hits and is three times slower. It stays as the working MindSpore path, from training to export to the same answers on the unit, and as a second opinion to compare MindYOLO against.
+
+Decision - Published YOLOv8 runs reach about 0.92 person AP@0.5 on HIT-UAV. So the MindYOLO model, not more work on hand built detectors, is the way to a big step up, and it is ready to train once ModelArts access arrives.
+
+Decision - Alerts count sightings by when they reach the command center, not by when they were seen. Counting by when they were seen would never alert on a late backlog, which is the case NeuSE is built for.
+
+Decision - Running the MindYOLO model on the Orange Pi AIpro's NPU through MindSpore Lite has to be checked on the board. MindSpore Lite's Ascend documents list the 310P chip but not the 310B. If it does not work, the board's own CANN tools are the way.
+
+Next
+
+- Command center on Huawei Cloud ECS with RDS, behind HTTPS, with SMN texts
+- MindYOLO training on ModelArts, then MindSpore Lite on the unit and on the Orange Pi AIpro

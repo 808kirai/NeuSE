@@ -15,12 +15,15 @@ NeuSE is an early prototype.
 Working now
 
 - Person detection on thermal drone footage with a classical detector and a small trained person check, running on an ordinary CPU, with a confidence that is calibrated to mean what it says
+- A second person detector, a small CNN trained with MindSpore and exported to MindIR, that runs on the unit with plain NumPy. It does not beat the person check yet, so the person check stays the default
 - The first warm spot baseline, kept for comparison
 - Safe handling of missing, empty, 16 bit, float and odd shaped frames, and of database errors, which no longer stop detection
 - Sightings placed on the ground when the unit gives its height, heading and camera tilt, and marked as placed at the unit when it does not
 - A local detection log, with the measured processing time of every frame
 - Store and forward sync. Detections queue on the unit and go to the command center whenever a link is up, newest first, with nothing lost or doubled when the link drops. One the command center refuses is held, counted and shown
 - A command center that receives detections from many units, with a live map page for coordinators showing every unit, whether it is online, whether it is still searching, its backlog and its sightings of people
+- A map of the ground each unit's camera has searched, so coordinators can see where nobody has looked yet
+- Alerts for coordinators when an area gets several strong sightings, with text messages through Huawei Cloud SMN when it is set up
 - Correction of unit clocks, so a field computer with a wrong clock does not put sightings in the wrong hour
 - Separate tokens for coordinators and for each unit, so a lost unit cannot read where people are
 - Situation reports for coordinators in plain words, written from a template with no network needed, or by a language model when one is set up
@@ -32,7 +35,8 @@ Working now
 
 Planned
 
-- A person detector trained with MindYOLO on Huawei Cloud ModelArts, using the HIT-UAV thermal dataset. The training config, the guide in `training/README.md` and the slot that runs it on the unit with MindSpore Lite are ready
+- A person detector trained with MindYOLO on Huawei Cloud ModelArts, using the HIT-UAV thermal dataset. Three training configs, the guide in `training/README.md` and the slot that runs it on the unit with MindSpore Lite, on the CPU or an Ascend NPU, are ready
+- Running the unit on an Orange Pi AIpro with its Ascend 310B NPU
 - Using the RGB camera to confirm thermal hits and cut false alarms
 - Running the command center on Huawei Cloud ECS with an RDS for MySQL database, behind HTTPS. The Docker setup, MySQL support and the guide in `docs/DEPLOY.md` are ready, and checked automatically against MySQL 8.0 and Docker on every push
 - Live GPS, height, heading and camera tilt from the drone, in place of the values a caller passes in today
@@ -52,6 +56,8 @@ Each hit gets a confidence from 0 to 1. It is calibrated on the validation image
 
 The person check is tied to the footage it learned from, 640 by 512 frames taken from 60 to 130 m, where a person is about 15 pixels tall. For a camera where people look bigger or smaller, set `NEUSE_FRAME_SCALE` to resize frames first. It warns once when frames are a different size. It scores at most 1,000 warm spots per frame, the warmest ones, so a frame full of noise cannot stall the unit.
 
+The person CNN, `NEUSE_DETECTOR=person-cnn`, is a second learned detector built with MindSpore. It finds warm spots at two sizes, which finds 96.7% of labelled people against 93.4% for one size, then looks at a 32 by 32 crop around each spot with three small convolution layers. It sees two channels, the frame and the warm spot map, plus eleven numbers about the spot's shape and warmth, and learns to score the spot and fit its box. It is trained in about 20 minutes on a laptop CPU with `scripts/train_person_cnn.py`, which also exports it to MindIR. On the unit it runs in plain NumPy, checked against MindSpore to agree to about 4 in a million. If its weights are missing it falls back to the person check.
+
 The first baseline, warm spots, flags any bright area of the right size. It cannot tell a person from a car engine and gives no confidence. Set `NEUSE_DETECTOR=warm-spots` to use it.
 
 Results on HIT-UAV
@@ -59,10 +65,13 @@ Results on HIT-UAV
 Scored once on the 579 test images, which hold 2,611 labelled people. Everything was trained on the training images and tuned on the separate validation images first. A hit counts when its box overlaps a person's box by at least half, the usual standard for detectors.
 
 - Person check - mAP@0.5 0.670, 79% of hits are people and 65% of people are found, with under 1 false hit per image
+- Person CNN - mAP@0.5 0.659, 71% of hits are people and 67% of people are found, with about 1.2 false hits per image, at about 100 ms per image
 - Warm spots, tuned - mAP@0.5 0.070, 4.9% of hits are people and 36% of people are found, with about 31 false hits per image
 - Warm spots, default settings - mAP@0.5 0.020, 3.2% of hits are people and 16% of people are found
 
 The person check scores mAP@0.5 0.710 at night and 0.504 by day. Daytime is harder because the sun warms the ground. It is strongest at 60 to 80 m, with 0.734, and drops to 0.506 at 120 to 130 m where people are only a few pixels across. Only 16 of its false hits land on vehicles, against 1,663 for warm spots.
+
+The person CNN was also behind on the validation images, 0.625 against 0.643, so the person check stays the default. The CNN finds slightly more people but makes more false hits, and is weakest at 120 to 130 m, where only 53% of its hits are people. Its value now is that it shows the MindSpore path working end to end, training, export to MindIR and the same answers on the unit.
 
 The time per image is about 30 ms for the person check and 4 ms for warm spots, on a laptop CPU. A frame crowded with warm spots can take over 100 ms.
 
@@ -91,10 +100,11 @@ The HIT-UAV paper reports person AP@0.5 on the same test images for well known d
 - SSD-512 - 85.6%
 - Faster R-CNN - 75.5%
 - Person check - 67.0%
+- Person CNN - 65.9%
 - YOLOv4-tiny - 16.9%
 - Warm spots - 7.0%
 
-The person check is well short of the full sized detectors, and those are the bar for the MindYOLO detector. It scores above the paper's YOLOv4-tiny run, but that run is a poor guide to what small detectors can do. Its person score is far below its own 83.6% on cars, which points to that one run going wrong on small people rather than to a limit of small detectors. What the person check does show is how far a method with no GPU and no deep learning framework can get.
+Later papers report YOLOv8 at about 92% person AP@0.5 on HIT-UAV, YOLOv8s at 640 pixels reaching 92.3%. That is the bar for the MindYOLO detector, and the reason it is the next step. The person check is well short of the full sized detectors. It scores above the paper's YOLOv4-tiny run, but that run is a poor guide to what small detectors can do. Its person score is far below its own 83.6% on cars, which points to that one run going wrong on small people rather than to a limit of small detectors. What the person check does show is how far a method with no GPU and no deep learning framework can get.
 
 How sync works
 
@@ -122,6 +132,8 @@ Detections show where people are, so the command center gives nothing out withou
 The coordinator page
 
 Open the command center address in a browser. It asks for the coordinator token, then shows a map with every unit and every sighting of a person, coloured by how recent it is, and a list of units with their state and backlog. It refreshes every 5 seconds and catches up on backlogs in the order they arrive, so detections sent late after an outage still appear.
+
+Ground the units' cameras have covered in the last 24 hours is shaded in blue squares about 22 m across, darker where it was searched recently. Each unit works out the ground its camera sees from its height, heading and tilt, and sends the squares with its sightings. A square with no shading has not been searched, which matters as much as where people were seen. Reports say how many square km were searched in their window. The squares need the unit's height, heading and tilt, and the camera's view angles from `NEUSE_CAMERA_FOV`.
 
 A unit shows as online while the command center keeps hearing from it. If it is in contact but its detector has stopped handling frames, for example because the camera failed, it shows as not searching.
 
@@ -153,16 +165,17 @@ The command center raises an alert when at least 3 sightings in one area, each w
 
 Layout
 
-- `src/pipeline.py` - Thermal detection, choosing between the person check and warm spots
+- `src/pipeline.py` - Thermal detection, choosing between the detectors, and the ground covered
 - `src/person_check.py` - The person check
-- `src/geo.py` - Places a sighting on the ground from the unit's height, heading and camera tilt
+- `src/person_cnn.py` - Runs the MindSpore trained person CNN with NumPy
+- `src/geo.py` - Places a sighting on the ground from the unit's height, heading and camera tilt, and works out the ground each frame covers
 - `src/logger.py` - Local detection log in SQLite, which doubles as the queue of detections to send
 - `src/sync.py` - Store and forward sync to the command center
 - `src/config.py` - Detector choice, thresholds, unit position and database location
 - `src/metrics.py` - Precision, recall and mAP against labelled boxes
 - `src/hit_uav.py` - Reads the HIT-UAV labels
 - `dashboard/` - Local web dashboard
-- `command_center/` - Command center API that units sync to, the coordinator map page and situation reports, on SQLite or RDS for MySQL
+- `command_center/` - Command center API that units sync to, the coordinator map page, situation reports and alerts, on SQLite or RDS for MySQL
 - `deploy/` - Docker and HTTPS setup for running the command center on a Huawei Cloud server
 - `training/` - MindYOLO config and guide for training on ModelArts
 - `src/mindyolo_detector.py` - Runs the trained MindYOLO model on the unit with MindSpore Lite
@@ -171,6 +184,7 @@ Layout
 - `scripts/evaluate_hit_uav.py` - Scores a detector on HIT-UAV
 - `scripts/evaluate_unseen_flights.py` - Scores the person check on flights held out of training
 - `scripts/train_person_check.py` - Trains the person check
+- `scripts/train_person_cnn.py` - Trains the person CNN with MindSpore and exports it to MindIR
 - `scripts/prepare_hit_uav.py` - Makes the person only copy of HIT-UAV for MindYOLO
 - `models/` - Trained model files
 - `tests/` - Automated tests
@@ -247,6 +261,13 @@ python scripts/evaluate_unseen_flights.py --dataset ../datasets/hit-uav
 # train the person check again, which rewrites models/person_check.npz
 python scripts/train_person_check.py --dataset ../datasets/hit-uav
 
+# the person cnn result above
+python scripts/evaluate_hit_uav.py --dataset ../datasets/hit-uav --split test --detector person-cnn
+
+# train the person cnn again with mindspore, about 20 minutes, which rewrites models/person_cnn.npz
+# run it with the python of a separate mindspore environment, set up as the top of the script shows
+python scripts/train_person_cnn.py --dataset ../datasets/hit-uav
+
 # send real test frames through the person check, with the dashboard open
 python scripts/simulate_feed.py --replay ../datasets/hit-uav/normal_json/test --frames 60
 
@@ -262,7 +283,7 @@ HIT-UAV by Suo et al., Scientific Data 10, 227 (2023), shared under CC BY 4.0 at
 
 Settings
 
-- `NEUSE_DETECTOR` - `person-check` by default, `warm-spots` for the first baseline, or `mindyolo` for a model trained on ModelArts
+- `NEUSE_DETECTOR` - `person-check` by default, `person-cnn` for the MindSpore CNN, `warm-spots` for the first baseline, or `mindyolo` for a model trained on ModelArts
 - `NEUSE_FRAME_SCALE` - Resizes frames before the person check, so people are about 15 pixels tall. Defaults to `1`
 - `NEUSE_CAMERA_FOV` - How wide the camera sees across and down the frame in degrees, like `45,37`. Used to place sightings on the ground
 - `NEUSE_DB` - Detection database, defaults to `neuse_local.db` in the project folder. Keep it out of folders that sync to the cloud, such as OneDrive
