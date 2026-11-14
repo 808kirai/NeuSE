@@ -147,6 +147,10 @@ The Write report button on the coordinator page, or `/api/v1/report?minutes=30`,
 - With `NEUSE_LLM_URL`, `NEUSE_LLM_KEY` and `NEUSE_LLM_MODEL` set, an OpenAI style chat API writes it instead, such as a model on Huawei Cloud. It is told to use only the facts given and never to turn sightings into a head count. If it fails or answers badly, the template is used and the report says so
 - Reports are only written when asked for, so a language model is not called on every refresh
 
+Alerts
+
+The command center raises an alert when one area gets at least 3 sightings with a confidence of 0.8 or more within 10 minutes. Alerts show in a list and as rings on the coordinator page. With Huawei Cloud Simple Message Notification set up, each alert also goes out as a text message, which reaches a phone on any network. An area that was just alerted stays quiet for 30 minutes. If a text fails, the alert is still kept and the page shows why. See `docs/DEPLOY.md` step 9.
+
 Layout
 
 - `src/pipeline.py` - Thermal detection, choosing between the person check and warm spots
@@ -276,6 +280,9 @@ Settings
 - `NEUSE_CC_HOST` and `NEUSE_CC_PORT` - Command center address, defaults to `127.0.0.1` and `8000`. It will not open to a network with no token set
 - `NEUSE_TILE_URL` and `NEUSE_TILE_CREDIT` - Map background for the coordinator page and the credit line shown for it. Defaults to the public OpenStreetMap tiles
 - `NEUSE_LLM_URL`, `NEUSE_LLM_KEY` and `NEUSE_LLM_MODEL` - Optional OpenAI style chat API for situation reports, the base address ending before `/chat/completions`. Unset, reports come from the template
+- `NEUSE_SMN_TOPIC_URN`, `NEUSE_SMN_REGION`, `NEUSE_SMN_PROJECT_ID`, `CLOUD_SDK_AK` and `CLOUD_SDK_SK` - Optional text alerts through Huawei Cloud SMN. Unset, alerts only show on the map
+- `NEUSE_ALERT_MIN_SIGHTINGS`, `NEUSE_ALERT_MIN_CONFIDENCE`, `NEUSE_ALERT_WINDOW_MINUTES` and `NEUSE_ALERT_QUIET_MINUTES` - When alerts are raised, defaults `3`, `0.8`, `10` and `30`
+- `NEUSE_PUBLIC_URL` - The command center's public address, added to alert texts
 - `NEUSE_HOST` - Defaults to `127.0.0.1`, set to `0.0.0.0` to open the unit dashboard to other devices. It has no token, so only do this on a network you trust
 - `NEUSE_PORT` - Dashboard port, defaults to `5000`
 - `NEUSE_DEBUG` - Off by default, set to `1` for Flask debug mode on a trusted dev machine only

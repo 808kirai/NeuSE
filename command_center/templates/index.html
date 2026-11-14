@@ -204,6 +204,9 @@
                 <label><input type="checkbox" id="show-searched" checked>
                     <i class="square" style="background: var(--searched)"></i>Searched in the last 24 hours</label>
             </div>
+            <h2>Alerts</h2>
+            <div id="alerts"><div class="empty">No alerts in the last 24 hours.</div></div>
+            <div id="alerts-note" class="meta"></div>
             <h2>Situation report</h2>
             <div class="report">
                 <div class="report-controls">
@@ -433,6 +436,38 @@
             if (event.target.checked) searchedLayer.addTo(map); else map.removeLayer(searchedLayer);
         });
 
+        // alerts, raised on the server when an area gets several strong sightings, see command_center/alerts.py
+        const alertMarkers = new Map();
+
+        function textNote(data) {
+            if (data.problem) return 'Texts are not going out, ' + data.problem + '.';
+            return data.texts ? 'Alerts are also sent as text messages.' : 'Alerts are shown here only, texts are not set up.';
+        }
+
+        async function drawAlerts() {
+            const data = await api('/api/v1/alerts?hours=24');
+            const list = document.getElementById('alerts');
+            list.replaceChildren();
+            if (!data.alerts.length) list.append(el('div', 'empty', 'No alerts in the last 24 hours.'));
+            for (const alert of data.alerts.slice(0, 10)) {
+                const card = el('div', 'hit');
+                card.append(el('div', 'unit-name', alert.sightings + ' strong sightings near ' +
+                    alert.latitude.toFixed(5) + ', ' + alert.longitude.toFixed(5)));
+                card.append(el('div', 'meta', ago(alert.created_at) + ', by ' + alert.units.join(', ')));
+                if (alert.sent_via && !alert.delivered) card.append(el('div', 'backlog', 'Text not delivered, ' + alert.error));
+                else if (alert.delivered) card.append(el('div', 'meta', 'Text sent'));
+                card.addEventListener('click', () => lookAt(alert.latitude, alert.longitude, 18));
+                list.append(card);
+                if (map && !alertMarkers.has(alert.id)) {
+                    const ring = L.circle([alert.latitude, alert.longitude],
+                        { radius: 100, weight: 3, fill: false, color: ageColour(alert.created_at) }).addTo(map);
+                    ring.bindTooltip(plain('Alert, ' + alert.sightings + ' strong sightings'));
+                    alertMarkers.set(alert.id, ring);
+                }
+            }
+            document.getElementById('alerts-note').textContent = textNote(data);
+        }
+
         function fitOnce() {
             // zoom to everything the first time there is something to show
             if (fitted || !map) return;
@@ -460,6 +495,7 @@
                 fitOnce();
                 // searched ground is extra, so a failure there leaves the rest of the page working
                 try { await drawSearched(); } catch (e) { lastSearched = 0; }
+                try { await drawAlerts(); } catch (e) {}
                 const online = unitData.units.filter(u => u.online).length;
                 document.getElementById('summary').textContent =
                     online + ' of ' + unitData.units.length + ' units online, ' + unitData.detections + ' sightings';

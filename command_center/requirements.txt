@@ -5,3 +5,6 @@ waitress==3.0.2
 # talks to rds for mysql, cryptography lets it log in to mysql 8 without ssl inside the private network
 pymysql==1.2.4
 cryptography==50.0.2
+# sends alert texts through huawei cloud smn, only used when NEUSE_SMN_TOPIC_URN and its keys are set
+huaweicloudsdksmn==3.1.222
+huaweicloudsdkcore==3.1.222

@@ -26,7 +26,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
-from command_center import reports, store
+from command_center import alerts, reports, store
 
 project_root = Path(__file__).resolve().parent.parent
 
@@ -71,8 +71,9 @@ def parse_unit_tokens(text):
     return tokens
 
 
-def create_app(db_path=None, token=None, llm=None, unit_tokens=None):
+def create_app(db_path=None, token=None, llm=None, unit_tokens=None, alert_settings=None, background_alerts=True):
     # builds the app, tests pass their own database, tokens and language model settings
+    # background_alerts False checks for alerts during the request, which tests use so results are ready at once
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = max_upload
     # an rds for mysql address in NEUSE_CC_DATABASE_URL, or an sqlite file
@@ -89,6 +90,10 @@ def create_app(db_path=None, token=None, llm=None, unit_tokens=None):
     tiles = os.environ.get("NEUSE_TILE_URL") or default_tiles
     tiles_credit = os.environ.get("NEUSE_TILE_CREDIT") or (default_tiles_credit if tiles == default_tiles else "")
     store.setup(db)
+    # alerts for coordinators when an area gets several strong sightings, see command_center/alerts.py
+    watch = alerts.watcher(db, alert_settings)
+    if watch.problem:
+        print(f"warning, {watch.problem}, alerts are still shown on the map", file=sys.stderr)
 
     def who():
         # returns True for the coordinator token, the unit's name for a unit token, or None when refused
@@ -169,6 +174,8 @@ def create_app(db_path=None, token=None, llm=None, unit_tokens=None):
                 return jsonify({"error": "sent_at must be an iso time with a utc offset"}), 400
 
         accepted, rejected = store.save(db, detections, sent_at, None if caller is True else caller)
+        if accepted:
+            watch.check_soon() if background_alerts else watch.check_now()
         return jsonify({"accepted": accepted, "rejected": rejected})
 
     @app.post("/api/v1/status")
@@ -223,6 +230,22 @@ def create_app(db_path=None, token=None, llm=None, unit_tokens=None):
             return jsonify({"error": "hours must be above 0 and at most 168"}), 400
         since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(timespec="seconds")
         return jsonify({"cell_degrees": store.cell_degrees, "cells": store.coverage(db, since)})
+
+    @app.get("/api/v1/alerts")
+    def recent_alerts():
+        # alerts for the map, hours sets how far back to look, at most a week
+        denied = readers_only()
+        if denied:
+            return denied
+        try:
+            hours = float(request.args.get("hours", 24))
+        except ValueError:
+            return jsonify({"error": "hours must be a number"}), 400
+        if not 0 < hours <= 168:
+            return jsonify({"error": "hours must be above 0 and at most 168"}), 400
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(timespec="seconds")
+        return jsonify({"alerts": store.alerts(db, since), "texts": watch.sender is not None,
+                        "problem": watch.problem})
 
     @app.get("/api/v1/units")
     def units():

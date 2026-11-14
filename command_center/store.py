@@ -114,6 +114,40 @@ mysql_coverage_schema = """
     ) engine=innodb default charset=utf8mb4
 """
 
+# alerts raised for coordinators, kept whether or not a text was sent, see command_center/alerts.py
+alerts_schema = """
+    create table if not exists alerts (
+        id integer primary key autoincrement,
+        created_at text not null,
+        latitude real not null,
+        longitude real not null,
+        sightings integer not null,
+        units text not null,
+        highest_confidence real,
+        text text not null,
+        sent_via text,
+        delivered integer not null default 0,
+        error text
+    )
+"""
+
+mysql_alerts_schema = """
+    create table if not exists alerts (
+        id bigint not null auto_increment primary key,
+        created_at varchar(32) not null,
+        latitude double not null,
+        longitude double not null,
+        sightings int not null,
+        units varchar(1024) not null,
+        highest_confidence double,
+        text varchar(600) not null,
+        sent_via varchar(16),
+        delivered tinyint not null default 0,
+        error varchar(600),
+        index alerts_time (created_at)
+    ) engine=innodb default charset=utf8mb4
+"""
+
 # size of a coverage square in degrees, the same as src/geo.py on the unit
 cell_degrees = 0.0002
 # most squares one request may carry
@@ -209,6 +243,7 @@ def setup(db):
             s.run(mysql_schema)
             s.run(mysql_units_schema)
             s.run(mysql_coverage_schema)
+            s.run(mysql_alerts_schema)
         return
 
     with closing(connect(db)) as conn:
@@ -244,6 +279,7 @@ def setup(db):
 
             conn.execute(units_schema)
             conn.execute(coverage_schema)
+            conn.execute(alerts_schema)
             conn.execute("create index if not exists coverage_seen on coverage (last_seen)")
             existing = {row[1] for row in conn.execute("pragma table_info(units)")}
             for name, kind in new_unit_columns.items():
@@ -540,6 +576,31 @@ def coverage(db, since=None):
             from coverage where last_seen >= ?
             group by cell_row, cell_col
         """, (since or "",))
+
+
+def save_alert(db, alert):
+    with session(db) as s:
+        s.run("""
+            insert into alerts (created_at, latitude, longitude, sightings, units, highest_confidence, text, sent_via,
+                                delivered, error)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (alert["created_at"], alert["latitude"], alert["longitude"], alert["sightings"],
+              json.dumps(alert["units"]), alert["highest_confidence"], alert["text"], alert["sent_via"],
+              alert["delivered"], alert["error"]))
+
+
+def alerts(db, since=None, limit=200):
+    # alerts raised since a time, newest first
+    with session(db) as s:
+        rows = s.rows("""
+            select id, created_at, latitude, longitude, sightings, units, highest_confidence, text, sent_via,
+                   delivered, error
+            from alerts where created_at >= ? order by id desc limit ?
+        """, (since or "", limit))
+    for row in rows:
+        row["units"] = json.loads(row["units"])
+        row["delivered"] = bool(row["delivered"])
+    return rows
 
 
 def count(db):

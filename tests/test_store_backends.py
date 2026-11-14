@@ -29,6 +29,7 @@ def db(request, tmp_path):
         s.run("drop table if exists detections")
         s.run("drop table if exists units")
         s.run("drop table if exists coverage")
+        s.run("drop table if exists alerts")
     store.setup(mysql_url)
     # running setup twice must be harmless
     store.setup(mysql_url)
@@ -139,3 +140,13 @@ def test_coverage_keeps_the_newest_time_and_counts_units(db):
     # only squares covered since a time
     assert len(store.coverage(db, (now - timedelta(minutes=10)).isoformat(timespec="seconds"))) == 1
 
+
+def test_alerts_are_kept_and_read_back(db):
+    alert = {"created_at": "2026-11-14T10:00:00+00:00", "latitude": -1.28, "longitude": 36.8, "sightings": 3,
+             "units": ["unit-1", "unit-2"], "highest_confidence": 0.95, "text": "NeuSE alert", "sent_via": "smn",
+             "delivered": 1, "error": None}
+    store.save_alert(db, alert)
+    store.save_alert(db, {**alert, "created_at": "2026-11-14T09:00:00+00:00", "delivered": 0, "error": "timeout"})
+    rows = store.alerts(db, since="2026-11-14T09:30:00+00:00")
+    assert len(rows) == 1 and rows[0]["units"] == ["unit-1", "unit-2"] and rows[0]["delivered"] is True
+    assert len(store.alerts(db)) == 2
