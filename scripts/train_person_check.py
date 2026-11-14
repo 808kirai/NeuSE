@@ -20,6 +20,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.hit_uav import load_split
+from src.integrity import record
 from src.metrics import add_counts, center_inside, iou, match_image, summarize
 from src.person_check import (feature_count, fitted_boxes, frame_features, raw_scores, suppress_overlaps,
                               to_chance)
@@ -206,6 +207,8 @@ def train(dataset, out, epochs=30):
           f"calibration scale {float(model['scale']):.3f} shift {float(model['shift']):.3f}")
 
     np.savez(out, **model)
+    # so the unit can tell these weights from changed ones, see src/integrity.py
+    record(out)
     print(f"saved {out} after {time.time() - start:.0f} s")
     return f1, float(model["threshold"])
 

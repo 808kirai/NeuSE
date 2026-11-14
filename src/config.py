@@ -71,6 +71,8 @@ class config:
     mindyolo_threshold = float(os.environ.get("NEUSE_MINDYOLO_THRESHOLD", 0.25))
     # where mindspore lite runs the model, cpu anywhere or ascend on an ascend npu such as the orange pi aipro
     mindyolo_device = (os.environ.get("NEUSE_MINDYOLO_DEVICE") or "cpu").lower()
+    # the mindyolo model's sha-256, checked before it is loaded, or record it in models/checksums.txt instead
+    mindyolo_sha256 = os.environ.get("NEUSE_MINDYOLO_SHA256") or None
 
     # most warm spots the person check scores in one frame, the warmest are kept
     # real drone frames have a few hundred, the cap keeps a noisy frame from stalling the unit
@@ -108,6 +110,12 @@ class config:
 
     # seconds between the unit's status notes, which tell the command center it is alive and where it is
     status_every = 5.0
+
+    # a frame whose brightness spreads less than this, in 8 bit grey levels, is blind
+    # a lens cap, a frozen or failed sensor, or a camera pointed at the sky gives a nearly flat frame
+    # blind frames do not mark ground as searched, and the unit shows as not searching while they last
+    # a real thermal scene spreads far more, the flattest of the 2,898 hit-uav frames spreads 11
+    min_frame_spread = float(os.environ.get("NEUSE_MIN_FRAME_SPREAD") or 2.0)
 
     # database shared by the pipeline and dashboard
     # set NEUSE_DB to point it at a different file

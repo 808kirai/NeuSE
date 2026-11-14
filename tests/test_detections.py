@@ -190,7 +190,7 @@ def test_a_database_error_does_not_stop_detection(pipeline, isolated_db, monkeyp
 
 
 def test_a_failed_status_note_does_not_stop_detection(pipeline, monkeypatch):
-    def broken(*args):
+    def broken(*args, **kwargs):
         raise sqlite3.OperationalError("disk full")
 
     monkeypatch.setattr(pipeline.logger, "note_status", broken)

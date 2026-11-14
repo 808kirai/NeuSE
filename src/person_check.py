@@ -12,6 +12,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from src.integrity import verify
+
 # a pixel is a candidate when it is this much warmer than the mean of the window around it
 local_window = 15
 local_contrast = 25
@@ -171,6 +173,8 @@ def fitted_boxes(features, boxes, mean, std, box_weights):
 # loads the trained weights and finds people in 8 bit thermal frames
 class person_check:
     def __init__(self, path, limit=None):
+        # refuses weights that do not match their recorded checksum, see src/integrity.py
+        verify(path)
         weights = np.load(Path(path))
         self.mean, self.std = weights["mean"], weights["std"]
         self.w1, self.b1 = weights["w1"], weights["b1"]

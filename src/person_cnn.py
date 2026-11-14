@@ -13,6 +13,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from src.integrity import verify
 from src.person_check import suppress_overlaps
 
 # warm spot finding, two window sizes, each with the contrast a pixel needs above its surroundings
@@ -127,6 +128,8 @@ def forward(weights, patches, scalars):
 class person_cnn:
     # loads the trained weights and finds people in 8 bit thermal frames
     def __init__(self, path, limit=None, batch=256):
+        # refuses weights that do not match their recorded checksum, see src/integrity.py
+        verify(path)
         loaded = np.load(Path(path))
         if int(loaded["layout_version"]) != layout_version:
             raise ValueError(f"{path} was made for a different version of the person cnn, "

@@ -15,6 +15,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from src.integrity import verify
 from src.person_check import suppress_overlaps
 
 # grey used to pad the frame to a square, the same as mindyolo's letterbox
@@ -69,7 +70,11 @@ def lite_runner(path, threads=4, device="cpu"):
 class mindyolo_detector:
     # finds people in 8 bit thermal frames with a trained mindyolo model
     # runner takes the network input and returns its first output, tests pass their own
-    def __init__(self, path=None, threshold=0.25, overlap=0.6, size=None, runner=None, most=1000, device="cpu"):
+    def __init__(self, path=None, threshold=0.25, overlap=0.6, size=None, runner=None, most=1000, device="cpu",
+                 checksum=None):
+        if runner is None:
+            # refuses a model that does not match its checksum, from NEUSE_MINDYOLO_SHA256 or models/checksums.txt
+            verify(path, checksum)
         self.runner = runner or lite_runner(path, device=device)
         # the score a box needs to be reported, set from the validation images once the model is trained
         self.threshold = threshold

@@ -1,0 +1,3 @@
+# sha-256 of each trained model, checked by the unit before loading, see src/integrity.py
+1d005e3d8e3dc0775ba7036435a87a1fe0227cc52d98167804b799c07e312565 person_check.npz
+f1d7e350561f7883e516e2648564141eeaaf5437d5ee4aba20fcdb0aa64d9d79 person_cnn.npz

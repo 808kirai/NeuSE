@@ -153,9 +153,11 @@ class data_logger:
                 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, rows)
 
-    def note_status(self, position, detector, frames, avg_latency_ms=None):
+    def note_status(self, position, detector, frames, avg_latency_ms=None, searched_at=None):
         # overwrite the unit's single status row
         # avg_latency_ms is the mean time per frame over recent frames, with or without detections
+        # searched_at is when the detector last handled a frame it could see through, now when not given
+        # it is the time the command center measures how long a unit has not been searching from
         lat, lon = position or (config.default_lat, config.default_lon)
         with closing(connect()) as conn, conn:
             conn.execute("""
@@ -164,7 +166,7 @@ class data_logger:
                 on conflict (id) do update set updated_at = excluded.updated_at, latitude = excluded.latitude,
                     longitude = excluded.longitude, detector = excluded.detector, frames = excluded.frames,
                     avg_latency_ms = excluded.avg_latency_ms
-            """, (now(), lat, lon, detector, frames, avg_latency_ms))
+            """, (searched_at or now(), lat, lon, detector, frames, avg_latency_ms))
 
 
 def note_coverage(cells):

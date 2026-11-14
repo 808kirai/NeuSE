@@ -57,6 +57,9 @@ class thermal_pipeline:
         self.warned_about_size = False
         # ground squares covered since they were last saved, (row, col) to (last seen, frames)
         self.covered = {}
+        # when the detector last handled a frame it could see through, and whether the camera is blind now
+        self.searched_at = now()
+        self.blind = False
 
         # pick the detector, the person check needs its trained weights
         self.detector = detector or config.detector
@@ -68,7 +71,7 @@ class thermal_pipeline:
                 if not config.mindyolo_path.exists():
                     raise FileNotFoundError(f"no model at {config.mindyolo_path}")
                 self.checker = mindyolo_detector(config.mindyolo_path, config.mindyolo_threshold,
-                                                 device=config.mindyolo_device)
+                                                 device=config.mindyolo_device, checksum=config.mindyolo_sha256)
             except (ImportError, OSError, RuntimeError, ValueError) as err:
                 # keep detecting with the person check instead of stopping the unit
                 log.warning("could not load the mindyolo model, using person-check, %s", err)
@@ -81,11 +84,12 @@ class thermal_pipeline:
                 log.warning("could not load the person cnn, using person-check, %s", err)
                 self.detector = person_check_name
         if self.detector == person_check_name:
-            if config.person_check_path.exists():
+            try:
                 self.checker = person_check(config.person_check_path, config.max_candidates)
-            else:
-                # keep detecting with the older method instead of stopping the unit
-                log.warning("no weights at %s, using warm-spots", config.person_check_path)
+            except (OSError, KeyError, ValueError) as err:
+                # missing, damaged or changed weights, keep detecting with the older method instead of stopping
+                log.warning("could not load the person check from %s, using warm-spots, %s",
+                            config.person_check_path, err)
                 self.detector = detector_name
 
     def process_frames(self, rgb_frame=None, thermal_frame=None, position=None, pose=None):
@@ -105,7 +109,10 @@ class thermal_pipeline:
         if hits:
             self._place(hits, thermal_frame, position, pose)
         self._save(hits, position)
-        self._cover(thermal_frame, position, pose)
+        # a blind camera must never make ground look searched, finding nobody there means nothing
+        if self._can_see(thermal_frame):
+            self.searched_at = now()
+            self._cover(thermal_frame, position, pose)
 
         # a short status note every few seconds, not every frame, so the disk is not kept busy
         self.frames += 1
@@ -119,7 +126,8 @@ class thermal_pipeline:
         # called every few seconds, and once more when a unit stops so nothing is left in memory
         try:
             average = sum(self.recent_ms) / len(self.recent_ms) if self.recent_ms else None
-            self.logger.note_status(getattr(self, "last_position", None), self.detector, self.frames, average)
+            self.logger.note_status(getattr(self, "last_position", None), self.detector, self.frames, average,
+                                    searched_at=self.searched_at)
             if self.covered:
                 note_coverage(self.covered)
                 self.covered = {}
@@ -127,6 +135,21 @@ class thermal_pipeline:
             # covered squares stay in memory and are saved with a later note
             log.warning("could not save the status note, %s", err)
         self.last_status = time.monotonic()
+
+    def _can_see(self, frame):
+        # true when the frame shows a scene, false for a missing, unreadable or nearly flat frame
+        # warns once when the camera goes blind and once when it can see again
+        gray = None
+        if isinstance(frame, np.ndarray) and frame.size:
+            gray = self._to_gray_uint8(frame)
+        seeing = gray is not None and float(gray.std()) >= config.min_frame_spread
+        if seeing == self.blind:
+            self.blind = not seeing
+            if self.blind:
+                log.warning("the camera looks blind, frames are missing or nearly flat, so no ground is marked searched")
+            else:
+                log.warning("the camera can see again")
+        return seeing
 
     def _cover(self, frame, position, pose):
         # marks the ground squares this frame covered, so coordinators can see what has been searched

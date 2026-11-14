@@ -103,7 +103,7 @@ def test_pipeline_runs_the_mindyolo_detector(isolated_db, monkeypatch, tmp_path)
     model.write_bytes(b"stand in")
     monkeypatch.setattr(config, "mindyolo_path", model)
     monkeypatch.setattr(pipeline_module, "mindyolo_detector",
-                        lambda path, threshold, device: mindyolo_detector(runner=fake_model([person]),
+                        lambda path, threshold, **kwargs: mindyolo_detector(runner=fake_model([person]),
                                                                           threshold=threshold))
     pipe = thermal_pipeline("mindyolo")
     frame = np.full((512, 640), 40, np.uint8)
@@ -136,7 +136,7 @@ def test_the_scoring_script_takes_the_mindyolo_threshold(isolated_db, monkeypatc
     monkeypatch.setattr(config, "mindyolo_path", model)
     monkeypatch.setattr(config, "mindyolo_threshold", 0.4)
     monkeypatch.setattr(pipeline_module, "mindyolo_detector",
-                        lambda path, threshold, device: mindyolo_detector(runner=fake_model([person]),
+                        lambda path, threshold, **kwargs: mindyolo_detector(runner=fake_model([person]),
                                                                           threshold=threshold))
     detect, cutoff, name = make_detector("mindyolo")
     assert name == "mindyolo" and cutoff == 0.4

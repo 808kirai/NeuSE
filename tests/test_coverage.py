@@ -54,9 +54,13 @@ def test_a_huge_footprint_is_refused_instead_of_filling_memory():
 
 # unit side
 
-def frames(pipe, count, pose=down):
+# a cool scene with gentle texture and nothing warm in it, so the camera can see but finds nobody
+scene = (60 + 20 * np.sin(np.arange(640)[None, :] / 15) + np.zeros((512, 1))).astype(np.uint8)
+
+
+def frames(pipe, count, pose=down, frame=scene):
     for _ in range(count):
-        pipe.process_frames(thermal_frame=np.zeros((512, 640), np.uint8), position=here, pose=pose)
+        pipe.process_frames(thermal_frame=frame, position=here, pose=pose)
 
 
 def saved_cells(db):
@@ -71,6 +75,30 @@ def test_the_pipeline_records_covered_ground_with_its_status(isolated_db, monkey
     count, total, synced = saved_cells(isolated_db)
     # the same 16 squares, three frames each, none sent yet
     assert count == 16 and total == 48 and synced == 0
+
+
+@pytest.mark.parametrize("blind", [np.zeros((512, 640), np.uint8), np.full((512, 640), 255, np.uint8), None,
+                                   np.zeros((0, 0), np.uint8)])
+def test_a_blind_camera_never_marks_ground_searched(isolated_db, monkeypatch, blind):
+    # a lens cap, a failed sensor or no frame at all, finding nobody there would mean nothing
+    monkeypatch.setattr(config, "status_every", 0.0)
+    frames(thermal_pipeline(), 3, frame=blind)
+    assert saved_cells(isolated_db)[0] == 0
+
+
+def test_a_blind_camera_shows_as_not_searching(isolated_db, monkeypatch):
+    # the status note keeps the time of the last frame the camera could see through
+    # so the command center's not searching warning appears while the frames are blind
+    from src.logger import read_status
+    monkeypatch.setattr(config, "status_every", 0.0)
+    pipe = thermal_pipeline()
+    frames(pipe, 1)
+    seen = read_status()["updated_at"]
+    pipe.searched_at = "2026-11-14T10:00:00+00:00"
+    frames(pipe, 2, frame=np.zeros((512, 640), np.uint8))
+    assert read_status()["updated_at"] == "2026-11-14T10:00:00+00:00" and pipe.blind
+    frames(pipe, 1)
+    assert read_status()["updated_at"] >= seen and not pipe.blind
 
 
 def test_no_pose_means_no_coverage(isolated_db, monkeypatch):

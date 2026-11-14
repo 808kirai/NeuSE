@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from src.hit_uav import load_split
+from src.integrity import record
 from src.metrics import center_inside
 from src.person_cnn import forward, inputs, layout_version, scalar_count
 from train_person_check import by_image, calibrate, pick_threshold
@@ -199,6 +200,8 @@ def train(dataset, out=None, epochs=12, negatives_per_person=4, batch=256, seed=
     np.savez(out, layout_version=np.int64(layout_version), box_mean=box_mean, box_std=box_std,
              scale=np.float64(scale), shift=np.float64(offset), threshold=np.float64(threshold),
              overlap=np.float32(overlap), **weights)
+    # so the unit can tell these weights from changed ones, see src/integrity.py
+    record(out)
     print(f"saved {out}")
 
     if export:
