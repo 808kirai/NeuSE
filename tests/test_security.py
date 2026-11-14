@@ -61,7 +61,8 @@ def test_the_page_only_runs_its_own_scripts(client):
     rules = directives(policy)
     assert rules["frame-ancestors"] == {"'none'"} and rules["object-src"] == {"'none'"}
     assert rules["script-src"] == {"'self'", f"'nonce-{nonce}'"}
-    assert "https://tile.openstreetmap.org" in rules["img-src"]
+    # images only from this server, inline data and the map tiles, nothing else
+    assert rules["img-src"] == {"'self'", "data:", "https://tile.openstreetmap.org"}
     # a new nonce every time
     assert nonce not in client.get("/").headers["Content-Security-Policy"]
 
