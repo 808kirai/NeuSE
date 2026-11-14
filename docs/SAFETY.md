@@ -49,7 +49,7 @@ The command center, OWASP API Security
 - The command center will not open to a network with a token shorter than 16 characters or one still holding the example value from `.env.example`
 - A caller that gives 20 wrong tokens in 5 minutes is turned away for the rest of that window, even with a right token, so guessing is slow and a lucky guess tells it nothing. Behind Caddy, `NEUSE_CC_TRUST_PROXY=1` makes this count each caller's own address. Units treat the refusal like a dropped link and keep their sightings
 - Every page and reply carries headers that stop it being framed by another site, read as another file type or leaking its address. Replies holding positions are never cached. The map page has a content security policy that only runs its own scripts, with a new nonce for each request, and everything a unit sends is put on the page as text, never as HTML
-- Every API request is logged with who made it, the coordinator, a unit's name or refused, but never the token
+- Every API request is logged with who made it, the coordinator, a unit's name or refused, but never the token. Everything taken from the request is escaped and cut to 200 characters, so a crafted address cannot forge a line in the log. CodeQL found this, see below
 - Request bodies are capped at 2 MB, and 16 MB once unzipped, so a crafted upload cannot fill the memory. Every field of every sighting is checked, and one bad row is refused on its own without blocking the rest
 - HTTPS comes from Caddy, which also tells browsers to always use HTTPS for the address. A unit refuses to send its token over plain HTTP to another computer
 - The command center runs in Docker as an ordinary user, not as root
@@ -66,7 +66,7 @@ The code and its packages, OWASP LLM03 and ML06
 - Every package is pinned to an exact version
 - CI audits every installed package for known vulnerabilities with pip-audit, installed exactly as the Docker image installs them
 - The audit found that Huawei Cloud's SMN SDK pins pymongo 4.18.2 and pyasn1 0.6.3, which have known vulnerabilities, even in its newest release. The SDK is now installed without its pins, from `command_center/requirements-smn.txt`, with pymongo 4.18.3 and pyasn1 0.6.5 from `command_center/requirements.txt`. Publishing through the SDK to a test server was checked with these versions, and the request was signed and sent as SMN expects
-- GitHub's CodeQL code scanning checks the Python code on every push to main, every pull request and once a week
+- GitHub's CodeQL code scanning checks the Python code on every push to main, every pull request and once a week. Its first scan found 7 issues. Three were real, the access log wrote the request path as given, so a path with an encoded line break could forge a log line. Four were in the tests, which checked HTML with a pattern and addresses by matching text. All 7 were fixed, the tests now read the page with an HTML parser and the policy by its parts
 - Dependabot proposes updates for Python packages, GitHub Actions and the Docker base image, and each one must pass the tests
 - The CI jobs get a read only token
 

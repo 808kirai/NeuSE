@@ -213,6 +213,8 @@ Researched against the OWASP Top 10 for LLM applications 2025, the OWASP machine
 - CI now audits every installed package with pip-audit. Its first run found known vulnerabilities in pymongo 4.18.2 and pyasn1 0.6.3, both pinned by Huawei Cloud's SMN SDK even in its newest release. The SDK is now installed without its pins, with the fixed pymongo 4.18.3 and pyasn1 0.6.5, and publishing through it to a test server was checked
 - CodeQL code scanning, Dependabot, a read only CI token, HSTS from Caddy, and `SECURITY.md` for private reports
 
+CodeQL's first scan found 7 issues. Three were real log injection, the access log wrote the request path as given, so a path with an encoded line break could forge a log line. Everything taken from a request is now escaped and cut to 200 characters. Four were in tests that checked HTML with a pattern and addresses by matching text, which now use an HTML parser and read the policy by its parts.
+
 Decision - When an address is turned away for guessing tokens, even a right token is refused until the window passes, so a lucky guess tells the guesser nothing. Units see this as a dropped link and keep their sightings.
 
 Decision - Records are kept by default on both the unit and the command center, since how long a search needs them is for the team to decide. The settings to remove them are documented for the end of a search.
