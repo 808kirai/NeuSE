@@ -104,6 +104,11 @@ class data_logger:
                     if name not in existing:
                         conn.execute(f"alter table {table} add column {name} {kind}")
 
+            # the first version marked a refused detection as sent, with the reason next to it
+            # so it was never counted or tried again, mark those as refused instead so they show up
+            # newer versions never set both, so this only touches rows from before the change
+            conn.execute("update detections set synced_at = null where synced_at is not null and sync_error is not null")
+
             # older rows get an id and this unit's name so they can be sent too
             for (row_id,) in conn.execute("select id from detections where uid is null").fetchall():
                 conn.execute("update detections set uid = ? where id = ?", (uuid.uuid4().hex, row_id))

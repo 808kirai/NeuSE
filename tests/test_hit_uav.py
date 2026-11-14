@@ -144,3 +144,8 @@ def test_bicycles_can_be_kept_as_their_own_class(dataset, tmp_path):
     lines = (both / "labels" / "train" / "1_60_90_0_00001.txt").read_text().splitlines()
     assert [line.split()[0] for line in lines] == ["0", "1"]
     assert "nc: 2" in (both / "hit_uav_person.yaml").read_text()
+
+
+def test_scoring_does_not_create_a_database_where_the_unit_keeps_its_own(dataset, isolated_db):
+    evaluate(load_split(dataset, "test"), min_blob_area=60)
+    assert not isolated_db.exists()

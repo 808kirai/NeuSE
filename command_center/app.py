@@ -109,6 +109,10 @@ def create_app(db_path=None, token=None, llm=None, unit_tokens=None):
         # the reply to give when the caller may not read, or None when it may
         caller = who()
         if caller is None:
+            if per_unit and not secret:
+                # unit tokens only send, so with no coordinator token nobody could ever read
+                return jsonify({"error": "no coordinator token is set, so the map and reports cannot be read, "
+                                         "set NEUSE_CC_TOKEN as well as NEUSE_CC_UNIT_TOKENS"}), 401
             return refuse()
         if caller is not True:
             return jsonify({"error": "a unit token can send but not read"}), 403
@@ -228,6 +232,10 @@ def main():
     if host not in ("127.0.0.1", "localhost", "::1") and not has_tokens:
         sys.exit("set NEUSE_CC_TOKEN before opening the command center to a network, "
                  "without it only this computer is answered")
+    # unit tokens can only send, so without a coordinator token the map and reports are closed to everyone
+    if os.environ.get("NEUSE_CC_UNIT_TOKENS") and not os.environ.get("NEUSE_CC_TOKEN"):
+        print("warning, NEUSE_CC_UNIT_TOKENS is set but NEUSE_CC_TOKEN is not, so nobody can open the map or reports",
+              file=sys.stderr)
 
     app = create_app()
     # waitress is a real web server, flask's own is only meant for development

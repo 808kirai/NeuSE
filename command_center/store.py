@@ -67,34 +67,48 @@ def connect(path):
 
 
 def setup(path):
-    with closing(connect(path)) as conn, conn:
+    with closing(connect(path)) as conn:
         conn.execute("pragma journal_mode=wal")
 
-        # the first version had no seq column and relied on sqlite's hidden row number
-        # move such a table over, keeping the order its rows arrived in
-        columns = [row[1] for row in conn.execute("pragma table_info(detections)")]
-        if columns and "seq" not in columns:
-            conn.execute("alter table detections rename to detections_old")
-            conn.execute("drop index if exists detections_time")
-            conn.execute("drop index if exists detections_unit")
-            conn.execute(schema)
-            conn.execute("""
-                insert into detections (uid, unit_id, timestamp, timestamp_utc, latitude, longitude, confidence,
-                                        thermal_peak, bbox, detector, latency_ms, received_at)
-                select uid, unit_id, timestamp, timestamp_utc, latitude, longitude, confidence, thermal_peak, bbox,
-                       detector, latency_ms, received_at
-                from detections_old order by rowid
-            """)
-            conn.execute("drop table detections_old")
+        # every change below happens in one transaction, so a stop part way leaves the database as it was
+        # python's sqlite3 would otherwise commit each table change on its own
+        conn.isolation_level = None
+        conn.execute("begin immediate")
+        try:
+            tables = {row[0] for row in conn.execute("select name from sqlite_master where type = 'table'")}
+            columns = [row[1] for row in conn.execute("pragma table_info(detections)")]
 
-        conn.execute(schema)
-        conn.execute(units_schema)
-        existing = {row[1] for row in conn.execute("pragma table_info(units)")}
-        for name, kind in new_unit_columns.items():
-            if name not in existing:
-                conn.execute(f"alter table units add column {name} {kind}")
-        conn.execute("create index if not exists detections_time on detections (timestamp_utc)")
-        conn.execute("create index if not exists detections_unit on detections (unit_id, timestamp_utc)")
+            # the first version had no seq column and relied on sqlite's hidden row number
+            # move such a table over, keeping the order its rows arrived in
+            if columns and "seq" not in columns:
+                conn.execute("alter table detections rename to detections_old")
+                conn.execute("drop index if exists detections_time")
+                conn.execute("drop index if exists detections_unit")
+                tables.add("detections_old")
+
+            conn.execute(schema)
+            # also picks up rows left behind by an earlier move that was stopped part way
+            if "detections_old" in tables:
+                conn.execute("""
+                    insert or ignore into detections (uid, unit_id, timestamp, timestamp_utc, latitude, longitude,
+                                                      confidence, thermal_peak, bbox, detector, latency_ms, received_at)
+                    select uid, unit_id, timestamp, timestamp_utc, latitude, longitude, confidence, thermal_peak, bbox,
+                           detector, latency_ms, received_at
+                    from detections_old order by rowid
+                """)
+                conn.execute("drop table detections_old")
+
+            conn.execute(units_schema)
+            existing = {row[1] for row in conn.execute("pragma table_info(units)")}
+            for name, kind in new_unit_columns.items():
+                if name not in existing:
+                    conn.execute(f"alter table units add column {name} {kind}")
+            conn.execute("create index if not exists detections_time on detections (timestamp_utc)")
+            conn.execute("create index if not exists detections_unit on detections (unit_id, timestamp_utc)")
+            conn.execute("commit")
+        except BaseException:
+            conn.execute("rollback")
+            raise
 
 
 def number(value, low=-math.inf, high=math.inf):

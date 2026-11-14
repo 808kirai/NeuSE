@@ -21,6 +21,7 @@ import itertools
 import json
 import statistics
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -58,7 +59,15 @@ def make_detector(name=None):
     # returns a function that takes an 8 bit frame and gives back (box, score) pairs
     # plus the score a hit needs to count, None when every hit counts
     # a trained model plugs in here later with the same shape, so the scoring stays the same
-    pipe = thermal_pipeline(name)
+    # scoring never logs anything, so the pipeline gets a throwaway database instead of the unit's own
+    saved_db = config.db_path
+    # windows can hold the file a moment after it closes, so a failed clean up is not an error
+    with tempfile.TemporaryDirectory(prefix="neuse-score-", ignore_cleanup_errors=True) as folder:
+        config.db_path = Path(folder) / "unused.db"
+        try:
+            pipe = thermal_pipeline(name)
+        finally:
+            config.db_path = saved_db
 
     def detect(frame):
         # calls the detector directly so the database is left alone

@@ -425,3 +425,60 @@ def test_demo_unit_ends_with_everything_sent(isolated_db, tmp_path, monkeypatch)
     assert sync.pending_count() == 0
     units = center.get("/api/v1/units").get_json()["units"]
     assert units[0]["unit_id"] == config.unit_id and units[0]["queued"] == 0
+
+
+def test_a_stopped_table_move_loses_nothing(tmp_path, monkeypatch):
+    # a power cut part way through moving the first version's table used to strand its rows
+    db = tmp_path / "old.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute("""create table detections (uid text primary key, unit_id text not null, timestamp text not null,
+                        timestamp_utc text not null, latitude real not null, longitude real not null, confidence real,
+                        thermal_peak real, bbox text, detector text, latency_ms real, received_at text not null)""")
+        conn.execute("insert into detections values ('a', 'unit-1', 't', 't', 1, 2, null, null, null, null, null, 'r')")
+
+    real_connect = store.connect
+
+    class power_cut:
+        # a connection that dies straight after the table is renamed
+        def __init__(self, conn):
+            self.conn = conn
+
+        def execute(self, sql, *args):
+            result = self.conn.execute(sql, *args)
+            if "rename to detections_old" in sql:
+                raise KeyboardInterrupt("power cut")
+            return result
+
+        def __getattr__(self, name):
+            return getattr(self.conn, name)
+
+    monkeypatch.setattr(store, "connect", lambda path: power_cut(real_connect(path)))
+    with pytest.raises(KeyboardInterrupt):
+        store.setup(db)
+    monkeypatch.setattr(store, "connect", real_connect)
+
+    # the move was undone as a whole, so the next start moves the row over
+    store.setup(db)
+    assert store.count(db) == 1 and store.recent(db)[0]["uid"] == "a"
+    with sqlite3.connect(db) as conn:
+        assert "detections_old" not in {r[0] for r in conn.execute("select name from sqlite_master")}
+
+
+def test_rows_stranded_by_an_earlier_stopped_move_are_recovered(tmp_path):
+    db = tmp_path / "stranded.db"
+    store.setup(db)
+    with sqlite3.connect(db) as conn:
+        conn.execute("create table detections_old as select * from detections where 0")
+        conn.execute("alter table detections_old drop column seq")
+        conn.execute("""insert into detections_old (uid, unit_id, timestamp, timestamp_utc, latitude, longitude,
+                        received_at) values ('z', 'unit-1', 't', 't', 1, 2, 'r')""")
+    store.setup(db)
+    assert store.count(db) == 1
+
+
+def test_unit_tokens_without_a_coordinator_token_say_why_nothing_can_be_read(tmp_path):
+    client = create_app(tmp_path / "c.db", token="", unit_tokens={"unit-1": "one"}).test_client()
+    reply = client.get("/api/v1/units")
+    assert reply.status_code == 401 and "NEUSE_CC_TOKEN" in reply.get_json()["error"]
+    # units can still send
+    assert client.post("/api/v1/status", json=note("unit-1"), headers={"Authorization": "Bearer one"}).status_code == 200

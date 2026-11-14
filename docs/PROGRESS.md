@@ -139,6 +139,13 @@ Decision - Clock correction uses the gap between the unit's clock and the comman
 
 Decision - The default camera view angles of 45 by 37 degrees are a guess, since HIT-UAV does not publish them. Ground positions in the demo are estimates until a real camera's values are set.
 
+A second check of the fixes before merging found four more, each tested and fixed
+
+- Detections the first version had refused were still hidden after upgrading, since it had marked them as sent. They now show as refused and can be retried
+- Moving the command center's first version table was not done in one step. A stop part way left the old rows where the map could not see them. The move is now all or nothing, and rows stranded by an earlier stop are picked up
+- With unit tokens set but no coordinator token, nobody could open the map or reports and nothing said why. The command center now warns at start and says why when asked
+- The scoring scripts made an empty database in the project folder. They now use a throwaway one
+
 Known limits - No HTTPS is built in, the command center needs a reverse proxy in front of it. The person check is tied to 640 by 512 frames from 60 to 130 m. Time per image on test footage is about 30 ms, and over 100 ms on a frame crowded with warm spots.
 
 Next

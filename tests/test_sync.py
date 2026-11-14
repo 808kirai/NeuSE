@@ -362,3 +362,21 @@ def test_unreachable_command_center_keeps_the_queue(isolated_db):
     log_hits(2)
     result = sync.sync_once(sync.http_sender(f"http://127.0.0.1:{free_port()}", timeout=2))
     assert result["pending"] == 2 and "could not reach" in result["error"]
+
+
+def test_refusals_from_the_first_version_show_up_after_upgrading(isolated_db):
+    # the first version marked a refused detection as sent with the reason next to it, so it was hidden for good
+    with sqlite3.connect(isolated_db) as conn:
+        conn.execute("""create table detections (id integer primary key autoincrement, timestamp text, latitude real,
+                        longitude real, confidence real, thermal_peak real, bbox text, detector text, latency_ms real,
+                        uid text, unit_id text, synced_at text, sync_error text)""")
+        conn.execute("""insert into detections (timestamp, latitude, longitude, bbox, uid, unit_id, synced_at, sync_error)
+                        values ('2026-11-12T10:00:00+03:00', 1, 2, '[1, 2, 3, 4]', 'a', 'unit-1',
+                                '2026-11-12T10:01:00+03:00', 'bad unit name')""")
+        conn.execute("""insert into detections (timestamp, latitude, longitude, bbox, uid, unit_id, synced_at)
+                        values ('2026-11-12T10:00:00+03:00', 1, 2, '[1, 2, 3, 4]', 'b', 'unit-1',
+                                '2026-11-12T10:01:00+03:00')""")
+    data_logger()
+    # the refused one is counted and can be retried, the one that really was sent stays sent
+    assert sync.refused_count() == 1 and sync.pending_count() == 0
+    assert sync.retry_refused() == 1 and sync.pending_count() == 1
