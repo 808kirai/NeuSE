@@ -1,9 +1,8 @@
 name: tests
 
-# run the test suite on every push and pull request
+# run the checks on every push to any branch and on every pull request
 on:
   push:
-    branches: [main]
   pull_request:
 
 jobs:
@@ -19,3 +18,51 @@ jobs:
         run: pip install -r requirements.txt
       - name: test
         run: python -m pytest -q tests
+
+  # the command center's storage against a real mysql 8.0, the same family as huawei cloud rds for mysql
+  mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0.44
+        env:
+          MYSQL_ROOT_PASSWORD: test-only
+          MYSQL_DATABASE: neuse_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -ptest-only"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: install
+        run: pip install -r requirements.txt
+      - name: test against mysql
+        env:
+          NEUSE_TEST_MYSQL_URL: mysql://root:test-only@127.0.0.1:3306/neuse_test
+        run: python -m pytest -q tests/test_store_backends.py -rs
+
+  # builds the deployment image and checks it answers and stores a sighting
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        run: docker build -f deploy/Dockerfile -t neuse-command-center .
+      - name: compose file is valid
+        run: cp deploy/.env.example deploy/.env && docker compose -f deploy/docker-compose.yml config --quiet
+      - name: run and check
+        run: |
+          docker run -d --name cc -p 8000:8000 -e NEUSE_CC_TOKEN=ci-token neuse-command-center
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:8000/api/v1/health && break; sleep 1; done
+          now=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)
+          body="{\"sent_at\": \"$now\", \"detections\": [{\"uid\": \"$(printf 'a%.0s' {1..32})\", \"unit_id\": \"unit-1\", \"timestamp\": \"$now\", \"latitude\": -1.28, \"longitude\": 36.8}]}"
+          curl -fs -H "Authorization: Bearer ci-token" -H "Content-Type: application/json" -d "$body" http://127.0.0.1:8000/api/v1/detections | tee reply.json
+          grep -q '"accepted":\["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\]' reply.json
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/v1/units)" = "401"
+          curl -fs -H "Authorization: Bearer ci-token" http://127.0.0.1:8000/api/v1/units | grep -q '"detections":1'
+          docker logs cc

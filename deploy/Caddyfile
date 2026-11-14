@@ -1,0 +1,5 @@
+# https in front of the command center
+# caddy asks let's encrypt for a certificate for the domain and renews it by itself
+{$NEUSE_DOMAIN} {
+	reverse_proxy command-center:8000
+}

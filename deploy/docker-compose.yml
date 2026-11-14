@@ -1,0 +1,37 @@
+# the command center behind https on one server, such as a huawei cloud ecs instance
+# copy .env.example to .env, fill it in, then from this folder run
+#   docker compose up -d --build
+# see docs/DEPLOY.md for every step
+services:
+  command-center:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file: .env
+    volumes:
+      # only used when NEUSE_CC_DATABASE_URL is empty and the sqlite file is kept instead
+      - neuse-data:/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  # caddy gets and renews an https certificate for NEUSE_DOMAIN by itself and passes requests on
+  https:
+    image: caddy:2.11.8
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NEUSE_DOMAIN: ${NEUSE_DOMAIN:?set NEUSE_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - command-center
+    restart: unless-stopped
+
+volumes:
+  neuse-data:
+  caddy-data:
+  caddy-config:

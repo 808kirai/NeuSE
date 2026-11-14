@@ -482,3 +482,16 @@ def test_unit_tokens_without_a_coordinator_token_say_why_nothing_can_be_read(tmp
     assert reply.status_code == 401 and "NEUSE_CC_TOKEN" in reply.get_json()["error"]
     # units can still send
     assert client.post("/api/v1/status", json=note("unit-1"), headers={"Authorization": "Bearer one"}).status_code == 200
+
+
+def test_empty_settings_from_a_deployment_file_count_as_not_set(tmp_path, monkeypatch):
+    # docker passes NEUSE_TILE_URL= as an empty value, which used to leave the map with no background
+    for name in ("NEUSE_TILE_URL", "NEUSE_TILE_CREDIT", "NEUSE_CC_DATABASE_URL", "NEUSE_LLM_URL", "NEUSE_CC_UNIT_TOKENS"):
+        monkeypatch.setenv(name, "")
+    monkeypatch.setenv("NEUSE_CC_DB", str(tmp_path / "c.db"))
+    app = create_app(token="secret")
+    page = app.test_client().get("/").get_data(as_text=True)
+    assert "tile.openstreetmap.org" in page and "OpenStreetMap contributors" in page
+    assert (tmp_path / "c.db").exists()
+    report = app.test_client().get("/api/v1/report", headers={"Authorization": "Bearer secret"}).get_json()
+    assert report["source"] == "template"

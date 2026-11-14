@@ -8,9 +8,13 @@ who may do what
     a unit token can only send, and only under its own unit's name, so a lost unit cannot read where people are
     with no tokens set the command center only answers the computer it runs on
 
+the database is an sqlite file by default
+set NEUSE_CC_DATABASE_URL=mysql://user:password@host:3306/database to use rds for mysql instead
+
 usage
     python -m command_center.app
     NEUSE_CC_TOKEN=some-secret NEUSE_CC_HOST=0.0.0.0 python -m command_center.app
+    see docs/DEPLOY.md to run it on huawei cloud
 """
 import hmac
 import json
@@ -71,14 +75,19 @@ def create_app(db_path=None, token=None, llm=None, unit_tokens=None):
     # builds the app, tests pass their own database, tokens and language model settings
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = max_upload
-    db = Path(db_path or os.environ.get("NEUSE_CC_DB", project_root / "command_center.db"))
+    # an rds for mysql address in NEUSE_CC_DATABASE_URL, or an sqlite file
+    db = db_path or os.environ.get("NEUSE_CC_DATABASE_URL") or os.environ.get("NEUSE_CC_DB",
+                                                                          project_root / "command_center.db")
+    if not store.is_mysql(db):
+        db = Path(db)
     secret = token if token is not None else os.environ.get("NEUSE_CC_TOKEN")
     per_unit = unit_tokens if unit_tokens is not None else parse_unit_tokens(os.environ.get("NEUSE_CC_UNIT_TOKENS"))
     # optional language model for situation reports, an openai style chat api such as huawei cloud's model service
     llm = llm if llm is not None else (os.environ.get("NEUSE_LLM_URL"), os.environ.get("NEUSE_LLM_KEY"),
                                        os.environ.get("NEUSE_LLM_MODEL"))
-    tiles = os.environ.get("NEUSE_TILE_URL", default_tiles)
-    tiles_credit = os.environ.get("NEUSE_TILE_CREDIT", default_tiles_credit if tiles == default_tiles else "")
+    # a setting left empty, as in the deployment's .env file, counts as not set
+    tiles = os.environ.get("NEUSE_TILE_URL") or default_tiles
+    tiles_credit = os.environ.get("NEUSE_TILE_CREDIT") or (default_tiles_credit if tiles == default_tiles else "")
     store.setup(db)
 
     def who():

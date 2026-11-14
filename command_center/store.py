@@ -1,11 +1,16 @@
 """
 storage for the command center
-sqlite for now so it runs anywhere, kept in one place so it can move to huawei cloud rds later
+works with a local sqlite file, or a mysql database such as huawei cloud rds for mysql
+
+every function takes db, which is either a path to an sqlite file
+or an address like mysql://user:password@host:3306/database
+characters such as @ or : in the password must be written with % codes, for example @ as %40
 """
 import json
 import math
 import re
 import sqlite3
+import urllib.parse
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
@@ -49,7 +54,45 @@ units_schema = """
     )
 """
 
-# columns added to the units table later, so older databases get them on startup
+# the same tables for mysql, which needs sizes on text that is indexed
+# times are kept as iso text in utc, so they sort the same way in both databases
+mysql_schema = """
+    create table if not exists detections (
+        seq bigint not null auto_increment primary key,
+        uid char(32) not null unique,
+        unit_id varchar(64) not null,
+        timestamp varchar(40) not null,
+        timestamp_utc varchar(32) not null,
+        latitude double not null,
+        longitude double not null,
+        confidence double,
+        thermal_peak double,
+        bbox varchar(255),
+        detector varchar(64),
+        latency_ms double,
+        received_at varchar(32) not null,
+        clock_offset_s double,
+        position_source varchar(16),
+        index detections_time (timestamp_utc),
+        index detections_unit (unit_id, timestamp_utc)
+    ) engine=innodb default charset=utf8mb4
+"""
+
+mysql_units_schema = """
+    create table if not exists units (
+        unit_id varchar(64) not null primary key,
+        last_status_at varchar(32) not null,
+        queued bigint,
+        latitude double,
+        longitude double,
+        detector varchar(64),
+        frames bigint,
+        refused bigint,
+        detector_idle_s double
+    ) engine=innodb default charset=utf8mb4
+"""
+
+# columns added to the units table later, so older sqlite databases get them on startup
 new_unit_columns = {"refused": "integer", "detector_idle_s": "real"}
 
 uid_pattern = re.compile(r"^[0-9a-f]{32}$")
@@ -62,12 +105,85 @@ clock_tolerance = 5.0
 max_whole = 10 ** 12
 
 
+def is_mysql(db):
+    return isinstance(db, str) and db.startswith("mysql://")
+
+
 def connect(path):
+    # a plain connection to an sqlite file
     return sqlite3.connect(path, timeout=10)
 
 
-def setup(path):
-    with closing(connect(path)) as conn:
+def mysql_settings(address):
+    # reads mysql://user:password@host:port/database into connection settings
+    parts = urllib.parse.urlsplit(address)
+    database = parts.path.lstrip("/")
+    if not parts.hostname or not parts.username or not database:
+        raise ValueError("the database address needs the form mysql://user:password@host:3306/database")
+    return {
+        "host": parts.hostname,
+        "port": parts.port or 3306,
+        "user": urllib.parse.unquote(parts.username),
+        "password": urllib.parse.unquote(parts.password or ""),
+        "database": urllib.parse.unquote(database),
+    }
+
+
+class session:
+    # one connection, committed when the block ends and rolled back if it fails
+    # the sql is written with ? marks, and mysql gets them as %s
+    def __init__(self, db):
+        self.db = db
+        self.mysql = is_mysql(db)
+
+    def __enter__(self):
+        if self.mysql:
+            import pymysql
+            self.conn = pymysql.connect(**mysql_settings(self.db), charset="utf8mb4", autocommit=False,
+                                        connect_timeout=10, cursorclass=pymysql.cursors.DictCursor)
+        else:
+            self.conn = connect(self.db)
+            self.conn.row_factory = sqlite3.Row
+        return self
+
+    def __exit__(self, kind, error, trace):
+        try:
+            if kind is None:
+                self.conn.commit()
+            else:
+                self.conn.rollback()
+        finally:
+            self.conn.close()
+
+    def sql(self, text):
+        return text.replace("?", "%s") if self.mysql else text
+
+    def run(self, text, params=()):
+        cursor = self.conn.cursor()
+        cursor.execute(self.sql(text), params)
+        return cursor
+
+    def many(self, text, rows):
+        if rows:
+            self.conn.cursor().executemany(self.sql(text), rows)
+
+    def rows(self, text, params=()):
+        return [dict(row) for row in self.run(text, params).fetchall()]
+
+    def one(self, text, params=()):
+        found = self.rows(text, params)
+        return found[0] if found else None
+
+
+def setup(db):
+    # creates the tables, and upgrades an older sqlite database
+    if is_mysql(db):
+        with session(db) as s:
+            s.run(mysql_schema)
+            s.run(mysql_units_schema)
+        return
+
+    with closing(connect(db)) as conn:
         conn.execute("pragma journal_mode=wal")
 
         # every change below happens in one transaction, so a stop part way leaves the database as it was
@@ -146,7 +262,7 @@ def problem(d):
         return "uid must be 32 lowercase hex characters"
     if not isinstance(d.get("unit_id"), str) or not unit_pattern.match(d["unit_id"]):
         return "unit_id must be 1 to 64 letters, digits, dots, dashes or underscores"
-    if parse_time(d.get("timestamp")) is None:
+    if not isinstance(d.get("timestamp"), str) or len(d["timestamp"]) > 40 or parse_time(d["timestamp"]) is None:
         return "timestamp must be an iso date and time with a utc offset"
     if not number(d.get("latitude"), -90, 90) or not number(d.get("longitude"), -180, 180):
         return "latitude and longitude must be valid coordinates"
@@ -165,7 +281,7 @@ def problem(d):
     return None
 
 
-def save(path, detections, sent_at=None, only_unit=None, now=None):
+def save(db, detections, sent_at=None, only_unit=None, now=None):
     # stores each detection once and returns the ids taken and the ids refused with the reason
     # an id already stored counts as taken, so a unit that never heard back can safely send it again
     # sent_at is the unit's clock when it sent the batch, as a moment in utc
@@ -199,9 +315,11 @@ def save(path, detections, sent_at=None, only_unit=None, now=None):
                      d["longitude"], d.get("confidence"), d.get("thermal_peak"), json.dumps(d.get("bbox")),
                      d.get("detector"), d.get("latency_ms"), received, offset, d.get("position_source") or "unit"))
 
-    with closing(connect(path)) as conn, conn:
-        conn.executemany("""
-            insert or ignore into detections
+    with session(db) as s:
+        # a uid already stored is skipped, which is what makes resending safe
+        ignore = "insert ignore into" if s.mysql else "insert or ignore into"
+        s.many(f"""
+            {ignore} detections
                 (uid, unit_id, timestamp, timestamp_utc, latitude, longitude, confidence, thermal_peak, bbox, detector,
                  latency_ms, received_at, clock_offset_s, position_source)
             values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -227,31 +345,32 @@ def status_problem(note):
     return None
 
 
-def save_status(path, note):
+def save_status(db, note):
     # keeps the newest status note per unit, timed by the command center's own clock
     received = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    with closing(connect(path)) as conn, conn:
-        conn.execute("""
-            insert into units (unit_id, last_status_at, queued, latitude, longitude, detector, frames, refused,
-                               detector_idle_s)
+    fields = ("last_status_at", "queued", "latitude", "longitude", "detector", "frames", "refused", "detector_idle_s")
+    with session(db) as s:
+        if s.mysql:
+            update = "on duplicate key update " + ", ".join(f"{f} = values({f})" for f in fields)
+        else:
+            update = "on conflict (unit_id) do update set " + ", ".join(f"{f} = excluded.{f}" for f in fields)
+        s.run(f"""
+            insert into units (unit_id, {", ".join(fields)})
             values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            on conflict (unit_id) do update set last_status_at = excluded.last_status_at, queued = excluded.queued,
-                latitude = excluded.latitude, longitude = excluded.longitude, detector = excluded.detector,
-                frames = excluded.frames, refused = excluded.refused, detector_idle_s = excluded.detector_idle_s
+            {update}
         """, (note["unit_id"], received, note.get("queued"), note["latitude"], note["longitude"],
               note.get("detector"), note.get("frames"), note.get("refused"), note.get("detector_idle_s")))
 
 
-def units(path):
+def units(db):
     # one summary per field unit, from its detections and its latest status note
-    with closing(connect(path)) as conn:
-        conn.row_factory = sqlite3.Row
-        found = {row["unit_id"]: dict(row) for row in conn.execute("""
+    with session(db) as s:
+        found = {row["unit_id"]: row for row in s.rows("""
             select unit_id, count(*) as detections, max(timestamp_utc) as last_detection,
                    max(received_at) as last_received
             from detections group by unit_id
         """)}
-        notes = {row["unit_id"]: dict(row) for row in conn.execute("select * from units")}
+        notes = {row["unit_id"]: row for row in s.rows("select * from units")}
 
         summaries = []
         for unit_id in sorted(set(found) | set(notes)):
@@ -259,7 +378,7 @@ def units(path):
             note = notes.get(unit_id, {})
             summary = {
                 "unit_id": unit_id,
-                "detections": seen.get("detections", 0),
+                "detections": int(seen.get("detections", 0)),
                 "last_detection": seen.get("last_detection"),
                 # the last time anything arrived from the unit
                 "last_contact": max(t for t in (seen.get("last_received"), note.get("last_status_at")) if t),
@@ -274,10 +393,10 @@ def units(path):
             }
             # without a status note the unit is placed at its newest detection
             if summary["latitude"] is None:
-                latest = conn.execute("""
+                latest = s.one("""
                     select latitude, longitude from detections where unit_id = ?
                     order by timestamp_utc desc limit 1
-                """, (unit_id,)).fetchone()
+                """, (unit_id,))
                 summary["latitude"], summary["longitude"] = latest["latitude"], latest["longitude"]
             summaries.append(summary)
     # most recently heard from first
@@ -302,29 +421,32 @@ def unit_state(unit, now, online_window, detecting_window):
     }
 
 
-def recent(path, after=None, limit=1000):
+def recent(db, after=None, limit=1000):
     # detections in the order they arrived, each with its running number seq
     # with after, only those that arrived later, oldest first, so a page can follow along without missing any
     # without after, the latest ones, so a page that just opened starts with the current picture
     # units send their backlog newest first, so arrival order is used here rather than detection time
-    with closing(connect(path)) as conn:
-        conn.row_factory = sqlite3.Row
-        fields = """seq, uid, unit_id, timestamp, timestamp_utc, latitude, longitude, confidence,
-                    thermal_peak, bbox, detector, received_at, clock_offset_s, position_source"""
+    fields = """seq, uid, unit_id, timestamp, timestamp_utc, latitude, longitude, confidence,
+                thermal_peak, bbox, detector, received_at, clock_offset_s, position_source"""
+    with session(db) as s:
         if after is None:
-            rows = conn.execute(f"select {fields} from detections order by seq desc limit ?", (limit,)).fetchall()
-            rows = rows[::-1]
+            rows = s.rows(f"select {fields} from detections order by seq desc limit ?", (limit,))[::-1]
         else:
-            rows = conn.execute(f"select {fields} from detections where seq > ? order by seq limit ?",
-                                (after, limit)).fetchall()
-    detections = []
+            rows = s.rows(f"select {fields} from detections where seq > ? order by seq limit ?", (after, limit))
     for row in rows:
-        detection = dict(row)
-        detection["bbox"] = json.loads(detection["bbox"]) if detection["bbox"] else None
-        detections.append(detection)
-    return detections
+        row["bbox"] = json.loads(row["bbox"]) if row["bbox"] else None
+    return rows
 
 
-def count(path):
-    with closing(connect(path)) as conn:
-        return conn.execute("select count(*) from detections").fetchone()[0]
+def sightings_between(db, start, end):
+    # every detection seen from start to end, both iso times in utc, for situation reports
+    with session(db) as s:
+        return s.rows("""
+            select unit_id, timestamp_utc, latitude, longitude, confidence, position_source
+            from detections where timestamp_utc >= ? and timestamp_utc <= ?
+        """, (start, end))
+
+
+def count(db):
+    with session(db) as s:
+        return int(s.one("select count(*) as n from detections")["n"])

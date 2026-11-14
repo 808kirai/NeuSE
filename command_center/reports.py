@@ -10,10 +10,8 @@ set NEUSE_LLM_URL, NEUSE_LLM_KEY and NEUSE_LLM_MODEL to use one, the template is
 """
 import json
 import math
-import sqlite3
 import urllib.error
 import urllib.request
-from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
 from command_center import store
@@ -69,12 +67,7 @@ def gather(db, minutes=30, now=None, online_window=60, detecting_window=30):
     # the facts a report is written from, all measured, nothing guessed
     now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
     start = (now - timedelta(minutes=minutes)).isoformat()
-    with closing(store.connect(db)) as conn:
-        conn.row_factory = sqlite3.Row
-        sightings = [dict(r) for r in conn.execute("""
-            select unit_id, timestamp_utc, latitude, longitude, confidence, position_source
-            from detections where timestamp_utc >= ? and timestamp_utc <= ?
-        """, (start, now.isoformat()))]
+    sightings = store.sightings_between(db, start, now.isoformat())
 
     units = []
     for unit in store.units(db):

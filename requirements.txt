@@ -9,6 +9,9 @@ opencv-python==5.0.0.93
 flask==3.1.3
 # web server the command center runs on, flask's own is only meant for development
 waitress==3.0.2
+# lets the command center use rds for mysql, see command_center/requirements.txt
+pymysql==1.2.4
+cryptography==50.0.2
 
 # automated test suite
 pytest==9.1.1

@@ -9,6 +9,7 @@ __pycache__/
 
 # environment and API keys
 .env
+deploy/.env
 
 # editor and IDE settings
 .vscode/
