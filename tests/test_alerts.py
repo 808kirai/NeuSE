@@ -61,8 +61,24 @@ def test_three_strong_sightings_in_one_area_raise_one_alert(db):
 def test_too_few_weak_or_old_sightings_raise_nothing(db):
     store.save(db, [detection(u) for u in uids(0, 2)])
     store.save(db, [detection(u, confidence=0.5) for u in uids(10, 5)])
-    store.save(db, [detection(u, minutes_ago=30) for u in uids(20, 5)])
+    # seen three hours ago, past the two hour limit, the people will have moved on
+    store.save(db, [detection(u, minutes_ago=180) for u in uids(20, 5)])
     assert alerts.check(db, defaults, fake_sender()) == []
+
+
+def test_a_backlog_from_a_unit_out_of_range_still_raises_an_alert(db):
+    # seen 25 to 40 minutes ago, only sent now that the link is back
+    store.save(db, [detection(u, minutes_ago=m) for u, m in zip(uids(0, 3), (25, 30, 40))])
+    send = fake_sender()
+    raised = alerts.check(db, defaults, send)
+    assert len(raised) == 1 and "seen 25 to 40 min ago" in send.sent[0][1]
+
+
+def test_sightings_that_arrived_long_ago_are_not_alerted_again(db):
+    earlier = datetime.now(timezone.utc) - timedelta(minutes=20)
+    store.save(db, [detection(u, minutes_ago=21) for u in uids(0, 3)], now=earlier)
+    # they arrived 20 minutes ago, outside the 10 minute window, so a check now finds nothing new
+    assert alerts.check(db, defaults, None) == []
 
 
 def test_an_area_already_alerted_stays_quiet(db):
@@ -96,14 +112,16 @@ def test_a_failed_text_still_keeps_the_alert(db):
 
 def test_texts_are_short_and_have_no_square_brackets():
     area = {"latitude": -1.2, "longitude": 36.8, "sightings": 3, "units": ["unit-[1]"] * 100,
-            "highest_confidence": 0.95}
-    text = alerts.text_for(area, 10, "https://neuse.example")
+            "highest_confidence": 0.95, "newest_minutes": 0, "oldest_minutes": 0}
+    text = alerts.text_for(area, "https://neuse.example")
     assert len(text) <= alerts.max_text and "[" not in text and "]" not in text
 
 
 def test_the_map_address_is_added_to_texts():
-    area = {"latitude": -1.2, "longitude": 36.8, "sightings": 3, "units": ["unit-1"], "highest_confidence": 0.95}
-    assert alerts.text_for(area, 10, "https://neuse.example").endswith("Map: https://neuse.example")
+    area = {"latitude": -1.2, "longitude": 36.8, "sightings": 3, "units": ["unit-1"], "highest_confidence": 0.95,
+            "newest_minutes": 2, "oldest_minutes": 5}
+    text = alerts.text_for(area, "https://neuse.example")
+    assert "seen 2 to 5 min ago" in text and text.endswith("Map: https://neuse.example")
 
 
 def test_settings_come_from_the_environment():

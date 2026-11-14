@@ -4,7 +4,9 @@ an alert is always kept and shown on the map, and can also go out as a text mess
 a text reaches any phone, even on a 2g network, which matters where rescuers work
 
 an alert is raised when an area, sightings within 100 m of each other, has at least min_sightings
-with a confidence of at least min_confidence within the last window_minutes
+with a confidence of at least min_confidence that reached the command center within the last window_minutes
+counting by arrival means a unit that was out of range still raises an alert when its backlog comes in,
+sightings older than max_age_minutes are left out since the people will have moved on
 an area near one already alerted stays quiet for quiet_minutes, so phones are not flooded
 
 to send texts, create an smn topic in huawei cloud with sms subscriptions for the coordinators' phones,
@@ -33,6 +35,7 @@ class settings:
         self.min_confidence = float(env.get("NEUSE_ALERT_MIN_CONFIDENCE") or 0.8)
         self.window_minutes = float(env.get("NEUSE_ALERT_WINDOW_MINUTES") or 10)
         self.quiet_minutes = float(env.get("NEUSE_ALERT_QUIET_MINUTES") or 30)
+        self.max_age_minutes = float(env.get("NEUSE_ALERT_MAX_AGE_MINUTES") or 120)
         # how near in metres an earlier alert must be to keep a new one quiet
         self.quiet_radius = 200.0
         # the address coordinators open, added to texts so they can go straight to the map
@@ -68,12 +71,21 @@ def smn_sender(config):
     return send
 
 
-def text_for(area, minutes, public_url):
+def seen_when(newest, oldest):
+    # minutes ago the sightings were made, as "seen just now", "seen 4 min ago" or "seen 12 to 40 min ago"
+    if oldest <= 1:
+        return "seen just now"
+    if newest == oldest:
+        return f"seen {newest} min ago"
+    return f"seen {newest} to {oldest} min ago"
+
+
+def text_for(area, public_url):
     # the alert in plain words, short enough for one text and free of square brackets
     confidence = f", highest confidence {area['highest_confidence']}" if area["highest_confidence"] is not None else ""
     text = (f"NeuSE alert: {reports.count(area['sightings'], 'strong sighting')} near "
-            f"{area['latitude']}, {area['longitude']} by {', '.join(area['units'])} in the last "
-            f"{minutes:g} min{confidence}.")
+            f"{area['latitude']}, {area['longitude']} by {', '.join(area['units'])}, "
+            f"{seen_when(area['newest_minutes'], area['oldest_minutes'])}{confidence}.")
     if public_url:
         text += f" Map: {public_url}"
     return text.replace("[", "(").replace("]", ")")[:max_text]
@@ -84,8 +96,9 @@ def check(db, config=None, sender=None, now=None):
     # sender is a function taking a subject and text, None means alerts are only kept for the map
     config = config or settings()
     now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
-    start = (now - timedelta(minutes=config.window_minutes)).isoformat()
-    strong = [s for s in store.sightings_between(db, start, now.isoformat())
+    arrived = (now - timedelta(minutes=config.window_minutes)).isoformat(timespec="seconds")
+    seen_after = (now - timedelta(minutes=config.max_age_minutes)).isoformat(timespec="seconds")
+    strong = [s for s in store.sightings_arrived(db, arrived, seen_after)
               if s["confidence"] is not None and s["confidence"] >= config.min_confidence]
 
     quiet_since = (now - timedelta(minutes=config.quiet_minutes)).isoformat(timespec="seconds")
@@ -98,7 +111,10 @@ def check(db, config=None, sender=None, now=None):
         centre = group["centre"]
         if any(reports.distance(centre, (a["latitude"], a["longitude"])) <= config.quiet_radius for a in recent + raised):
             continue
+        ages = [max(0, round((now - datetime.fromisoformat(p["timestamp_utc"])).total_seconds() / 60)) for p in points]
         area = {
+            "newest_minutes": min(ages),
+            "oldest_minutes": max(ages),
             "latitude": round(centre[0], 5),
             "longitude": round(centre[1], 5),
             "sightings": len(points),
@@ -106,7 +122,7 @@ def check(db, config=None, sender=None, now=None):
             "highest_confidence": round(max(p["confidence"] for p in points), 2),
         }
         alert = {**area, "created_at": now.isoformat(timespec="seconds"),
-                 "text": text_for(area, config.window_minutes, config.public_url),
+                 "text": text_for(area, config.public_url),
                  "sent_via": None, "delivered": 0, "error": None}
         if sender is not None:
             try:

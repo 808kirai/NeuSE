@@ -97,7 +97,7 @@ Then restart with `sudo docker compose up -d`. The next report written on the ma
 
 9. Text alerts through SMN
 
-The command center raises an alert when one area, sightings within 100 m of each other, gets at least 3 sightings with a confidence of 0.8 or more within 10 minutes. Alerts always show on the map. With Simple Message Notification set up, each one also goes out as a text message, which reaches a coordinator's phone on any network, even 2G. An area that was just alerted stays quiet for 30 minutes so phones are not flooded.
+The command center raises an alert when one area, sightings within 100 m of each other, gets at least 3 sightings with a confidence of 0.8 or more that reach the command center within 10 minutes. A backlog from a unit that was out of range counts when it arrives, as long as the sightings are under 2 hours old. Alerts always show on the map. With Simple Message Notification set up, each one also goes out as a text message, which reaches a coordinator's phone on any network, even 2G. An area that was just alerted stays quiet for 30 minutes so phones are not flooded.
 
 - In the SMN console, in the same region as the server, create a topic called neuse-alerts
 - Add a subscription to the topic for each coordinator's phone, with the protocol set to SMS. Each phone gets a message asking to confirm
@@ -111,7 +111,7 @@ The command center raises an alert when one area, sightings within 100 m of each
 - `CLOUD_SDK_AK` and `CLOUD_SDK_SK` - The access key and secret key, the names Huawei Cloud's own SDK uses
 - `NEUSE_PUBLIC_URL` - The address coordinators open, added to each text
 
-`NEUSE_ALERT_MIN_SIGHTINGS`, `NEUSE_ALERT_MIN_CONFIDENCE`, `NEUSE_ALERT_WINDOW_MINUTES` and `NEUSE_ALERT_QUIET_MINUTES` change when alerts are raised.
+`NEUSE_ALERT_MIN_SIGHTINGS`, `NEUSE_ALERT_MIN_CONFIDENCE`, `NEUSE_ALERT_WINDOW_MINUTES`, `NEUSE_ALERT_MAX_AGE_MINUTES` and `NEUSE_ALERT_QUIET_MINUTES` change when alerts are raised.
 
 Restart with `sudo docker compose up -d`. The alerts list on the map says whether texts are going out, and an alert whose text failed shows why. Text messages are charged per message, so check the SMN price for your region.
 

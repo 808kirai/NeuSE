@@ -74,7 +74,8 @@ mysql_schema = """
         clock_offset_s double,
         position_source varchar(16),
         index detections_time (timestamp_utc),
-        index detections_unit (unit_id, timestamp_utc)
+        index detections_unit (unit_id, timestamp_utc),
+        index detections_received (received_at)
     ) engine=innodb default charset=utf8mb4
 """
 
@@ -244,6 +245,13 @@ def setup(db):
             s.run(mysql_units_schema)
             s.run(mysql_coverage_schema)
             s.run(mysql_alerts_schema)
+            # alerts look sightings up by arrival, a database made before that index needs it added
+            have = s.rows("""
+                select count(*) as n from information_schema.statistics
+                where table_schema = database() and table_name = 'detections' and index_name = 'detections_received'
+            """)
+            if not have[0]["n"]:
+                s.run("create index detections_received on detections (received_at)")
         return
 
     with closing(connect(db)) as conn:
@@ -287,6 +295,7 @@ def setup(db):
                     conn.execute(f"alter table units add column {name} {kind}")
             conn.execute("create index if not exists detections_time on detections (timestamp_utc)")
             conn.execute("create index if not exists detections_unit on detections (unit_id, timestamp_utc)")
+            conn.execute("create index if not exists detections_received on detections (received_at)")
             conn.execute("commit")
         except BaseException:
             conn.execute("rollback")
@@ -511,6 +520,16 @@ def sightings_between(db, start, end):
             select unit_id, timestamp_utc, latitude, longitude, confidence, position_source
             from detections where timestamp_utc >= ? and timestamp_utc <= ?
         """, (start, end))
+
+
+def sightings_arrived(db, since, seen_after):
+    # detections that reached the command center since a time and were seen after another, for alerts
+    # a unit that was out of range sends its backlog late, and those sightings still need an alert
+    with session(db) as s:
+        return s.rows("""
+            select unit_id, timestamp_utc, latitude, longitude, confidence
+            from detections where received_at >= ? and timestamp_utc >= ?
+        """, (since, seen_after))
 
 
 def coverage_problem(payload):

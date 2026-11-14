@@ -149,7 +149,7 @@ The Write report button on the coordinator page, or `/api/v1/report?minutes=30`,
 
 Alerts
 
-The command center raises an alert when one area gets at least 3 sightings with a confidence of 0.8 or more within 10 minutes. Alerts show in a list and as rings on the coordinator page. With Huawei Cloud Simple Message Notification set up, each alert also goes out as a text message, which reaches a phone on any network. An area that was just alerted stays quiet for 30 minutes. If a text fails, the alert is still kept and the page shows why. See `docs/DEPLOY.md` step 9.
+The command center raises an alert when at least 3 sightings in one area, each with a confidence of 0.8 or more, reach it within 10 minutes. It counts by when sightings arrive, so a unit that was out of range still raises an alert when its backlog comes in. Sightings more than 2 hours old are left out, and the text says when the people were seen. Alerts show in a list and as rings on the coordinator page. With Huawei Cloud Simple Message Notification set up, each alert also goes out as a text message, which reaches a phone on any network. An area that was just alerted stays quiet for 30 minutes. If a text fails, the alert is still kept and the page shows why. See `docs/DEPLOY.md` step 9.
 
 Layout
 
@@ -282,7 +282,7 @@ Settings
 - `NEUSE_TILE_URL` and `NEUSE_TILE_CREDIT` - Map background for the coordinator page and the credit line shown for it. Defaults to the public OpenStreetMap tiles
 - `NEUSE_LLM_URL`, `NEUSE_LLM_KEY` and `NEUSE_LLM_MODEL` - Optional OpenAI style chat API for situation reports, the base address ending before `/chat/completions`. Unset, reports come from the template
 - `NEUSE_SMN_TOPIC_URN`, `NEUSE_SMN_REGION`, `NEUSE_SMN_PROJECT_ID`, `CLOUD_SDK_AK` and `CLOUD_SDK_SK` - Optional text alerts through Huawei Cloud SMN. Unset, alerts only show on the map
-- `NEUSE_ALERT_MIN_SIGHTINGS`, `NEUSE_ALERT_MIN_CONFIDENCE`, `NEUSE_ALERT_WINDOW_MINUTES` and `NEUSE_ALERT_QUIET_MINUTES` - When alerts are raised, defaults `3`, `0.8`, `10` and `30`
+- `NEUSE_ALERT_MIN_SIGHTINGS`, `NEUSE_ALERT_MIN_CONFIDENCE`, `NEUSE_ALERT_WINDOW_MINUTES`, `NEUSE_ALERT_QUIET_MINUTES` and `NEUSE_ALERT_MAX_AGE_MINUTES` - When alerts are raised, defaults `3`, `0.8`, `10`, `30` and `120`
 - `NEUSE_PUBLIC_URL` - The command center's public address, added to alert texts
 - `NEUSE_HOST` - Defaults to `127.0.0.1`, set to `0.0.0.0` to open the unit dashboard to other devices. It has no token, so only do this on a network you trust
 - `NEUSE_PORT` - Dashboard port, defaults to `5000`
