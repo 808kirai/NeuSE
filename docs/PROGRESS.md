@@ -217,5 +217,7 @@ Decision - When an address is turned away for guessing tokens, even a right toke
 
 Decision - Records are kept by default on both the unit and the command center, since how long a search needs them is for the team to decide. The settings to remove them are documented for the end of a search.
 
+Dependabot's first proposals were merged once their tests passed - numpy 2.5.4, with both detectors scoring exactly as before on the test images, pytest 9.2.0, pymongo 4.19.0 after publishing through the SMN SDK was checked again, and newer GitHub Actions. The move of the Docker image from Python 3.12 to 3.15 is left open, since the project is tested on 3.12.
+
 Decision - Physical attacks that hide people from thermal cameras are not defended against. NeuSE is for finding people who want to be found, and the remaining risk is written down instead of hidden.
 
