@@ -92,7 +92,7 @@ Decision - The page and reports now say sightings, not people found. The same pe
 
 Decision - Reports are written only when a coordinator asks, so a paid language model is not called on every refresh.
 
-2026-11-14 - Code review and fixes
+2026-11-14 - Code review and fixes, PR 22
 
 The whole codebase was read for bugs and weak logic, each suspected problem was tested, and every one found was fixed. Nothing was wrong with the headline scores. The same model scores the same on the test images after the fixes, mAP@0.5 0.670 with 79% precision and 65% recall.
 
