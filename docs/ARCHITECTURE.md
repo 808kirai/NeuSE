@@ -27,14 +27,15 @@ many field units -> /api/v1/detections and /api/v1/status -> command center data
 - Clock correction, `command_center/store.py` - Field computers often have no battery clock. The command center compares the clock reading sent with each batch against its own clock and corrects the detection times by the difference, keeping the time the unit gave next to the correction.
 - Coordinator map, `command_center/templates/index.html` - Shows every unit, whether it is online and whether it is still searching, its backlog and its sightings on a live map. It follows detections in the order they arrive, so a backlog sent after an outage still shows up. The map library is served by the command center itself, and the lists keep working when the map background cannot load.
 - Situation reports, `command_center/reports.py` - Work out the facts for a time window, such as silent units with sightings still waiting, units in contact that have stopped searching and areas where people were seen, then write them up in plain words. A template writes them with no network needed, or an OpenAI style language model does when one is set up, falling back to the template if it fails.
-- Storage, `command_center/store.py` - Keeps each detection id once, so units can safely resend, and numbers detections in the order they arrive. SQLite for now, kept in one module so it can move to Huawei Cloud RDS.
+- Storage, `command_center/store.py` - Keeps each detection id once, so units can safely resend, and numbers detections in the order they arrive. Works on an SQLite file or on RDS for MySQL, chosen with `NEUSE_CC_DATABASE_URL`, and is checked against MySQL 8.0 on every push.
+- Deployment, `deploy/` and `docs/DEPLOY.md` - A Docker image for the command center and Caddy in front of it for HTTPS, for one Huawei Cloud ECS server with RDS for MySQL. The image is built and tried on every push.
 
 Planned
 
-- Training - A MindYOLO person detector trained on Huawei Cloud ModelArts with the HIT-UAV thermal drone dataset, then exported to MindIR.
-- On-device inference - MindSpore Lite runs the trained model on the field unit in place of the person check. It targets an ordinary CPU first, and Ascend hardware if it becomes available.
+- Training - A MindYOLO person detector trained on Huawei Cloud ModelArts with the HIT-UAV thermal drone dataset, then exported to MindIR. The config and guide are in `training/`.
+- On-device inference - MindSpore Lite runs the trained model on the field unit in place of the person check, chosen with `NEUSE_DETECTOR=mindyolo`. The slot, `src/mindyolo_detector.py`, is built and tested with a stand in for the model. It targets an ordinary CPU first, and Ascend hardware if it becomes available.
 - RGB and thermal together - The RGB camera confirms thermal hits to cut false alarms from hot objects that are not people.
-- Command center on Huawei Cloud - The API, map and reports on ECS with an RDS database, behind HTTPS, with reports written by a model on Huawei Cloud.
+- Command center on Huawei Cloud - The API, map and reports on ECS with RDS for MySQL, behind HTTPS, with reports written by a model in ModelArts Studio. Everything for it is ready and waiting for cloud access.
 - Live pose - Height, heading and camera tilt from the drone's own flight data, in place of the values a caller passes in today.
 
 Full flow once built

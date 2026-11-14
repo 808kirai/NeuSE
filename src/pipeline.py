@@ -8,6 +8,7 @@ import numpy as np
 from src.config import config
 from src.geo import ground_position
 from src.logger import data_logger, now
+from src.mindyolo_detector import mindyolo_detector
 from src.person_check import person_check
 
 # warnings about skipped frames go to the standard python log
@@ -17,7 +18,8 @@ log = logging.getLogger(__name__)
 # these are the same names used to choose a detector
 detector_name = "warm-spots"
 person_check_name = "person-check"
-detectors = (person_check_name, detector_name)
+mindyolo_name = "mindyolo"
+detectors = (person_check_name, detector_name, mindyolo_name)
 
 # frame size the person check was trained on, width and height
 trained_size = (640, 512)
@@ -25,9 +27,10 @@ trained_size = (640, 512)
 max_unsaved = 5000
 
 
-# finds people in thermal frames with one of two classical detectors
+# finds people in thermal frames with one of three detectors
 # person-check scores small warm spots with a small trained check and gives a confidence
 # warm-spots flags any bright area of the right size and gives no confidence
+# mindyolo runs a yolov8 model trained on modelarts with mindspore lite, see training/README.md
 # the rgb frame is accepted but not used yet
 class thermal_pipeline:
     def __init__(self, detector=None):
@@ -53,6 +56,15 @@ class thermal_pipeline:
         if self.detector not in detectors:
             raise ValueError(f"unknown detector {self.detector}, use one of {detectors}")
         self.checker = None
+        if self.detector == mindyolo_name:
+            try:
+                if not config.mindyolo_path.exists():
+                    raise FileNotFoundError(f"no model at {config.mindyolo_path}")
+                self.checker = mindyolo_detector(config.mindyolo_path, config.mindyolo_threshold)
+            except (ImportError, OSError, RuntimeError, ValueError) as err:
+                # keep detecting with the person check instead of stopping the unit
+                log.warning("could not load the mindyolo model, using person-check, %s", err)
+                self.detector = person_check_name
         if self.detector == person_check_name:
             if config.person_check_path.exists():
                 self.checker = person_check(config.person_check_path, config.max_candidates)
@@ -135,7 +147,7 @@ class thermal_pipeline:
             return []
 
         if self.checker is not None:
-            return self._person_check_hits(thermal_gray, min_score)
+            return self._model_hits(thermal_gray, min_score)
 
         # opencv can still reject odd frames, so skip them instead of crashing
         try:
@@ -173,17 +185,19 @@ class thermal_pipeline:
 
         return hits
 
-    def _person_check_hits(self, thermal_gray, min_score):
-        # runs the person check and turns its boxes into detections
+    def _model_hits(self, thermal_gray, min_score):
+        # runs the person check or the mindyolo model and turns their boxes into detections
         height, width = thermal_gray.shape
 
-        # resize so people are about the size the check was trained on, boxes are scaled back below
-        scale = config.frame_scale
+        # resize so people are about the size the person check was trained on, boxes are scaled back below
+        # mindyolo fits any frame to its own input size, so it gets the frame as it is
+        scale = config.frame_scale if self.detector == person_check_name else 1.0
         work = thermal_gray
         if scale != 1.0:
             size = (max(1, round(width * scale)), max(1, round(height * scale)))
             work = cv2.resize(thermal_gray, size, interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
-        if not self.warned_about_size and (work.shape[1], work.shape[0]) != trained_size:
+        if (self.detector == person_check_name and not self.warned_about_size
+                and (work.shape[1], work.shape[0]) != trained_size):
             log.warning("the person check was trained on %s by %s frames where a person is about 15 pixels tall, "
                         "this frame is %s by %s, set NEUSE_FRAME_SCALE if people look much bigger or smaller",
                         *trained_size, work.shape[1], work.shape[0])
@@ -193,7 +207,7 @@ class thermal_pipeline:
         try:
             found = self.checker.detect(work, min_score)
         except (cv2.error, ValueError, MemoryError) as err:
-            log.warning("skipping thermal frame the person check could not process %s", err)
+            log.warning("skipping thermal frame the %s detector could not process, %s", self.detector, err)
             return []
 
         hits = []
@@ -206,10 +220,10 @@ class thermal_pipeline:
                 continue
             hits.append({
                 "bbox": [x0, y0, x1 - x0, y1 - y0],
-                # chance this spot is a person, 0 to 1, calibrated on the validation images
+                # chance this is a person, 0 to 1
                 "confidence": float(score),
                 "thermal_peak": int(np.max(thermal_gray[y0:y1, x0:x1])),
-                "detector": person_check_name,
+                "detector": self.detector,
             })
         return hits
 

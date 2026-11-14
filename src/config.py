@@ -50,6 +50,7 @@ class config:
     # which detector the pipeline runs
     # person-check finds small warm spots and scores each one with a small trained check, the default
     # warm-spots is the first baseline, any bright area of the right size, kept for comparison and the demo feed
+    # mindyolo runs a model trained on modelarts, see training/README.md
     detector = os.environ.get("NEUSE_DETECTOR", "person-check")
 
     # weights for the person check, made by scripts/train_person_check.py
@@ -59,6 +60,11 @@ class config:
     # frames are resized by this factor before the person check so people land near that size
     # e.g. 0.5 for a camera where people look twice as big, boxes are scaled back afterwards
     frame_scale = float(os.environ.get("NEUSE_FRAME_SCALE", 1.0))
+
+    # the mindyolo model converted for mindspore lite, used when the detector is mindyolo
+    mindyolo_path = Path(os.environ.get("NEUSE_MINDYOLO_MODEL", project_root / "models" / "person_mindyolo.ms"))
+    # the score a mindyolo box needs to be reported, pick it on the validation images once the model is trained
+    mindyolo_threshold = float(os.environ.get("NEUSE_MINDYOLO_THRESHOLD", 0.25))
 
     # most warm spots the person check scores in one frame, the warmest are kept
     # real drone frames have a few hundred, the cap keeps a noisy frame from stalling the unit

@@ -32,10 +32,9 @@ Working now
 
 Planned
 
-- A person detector trained with MindYOLO on Huawei Cloud ModelArts, using the HIT-UAV thermal dataset
-- On-device inference with MindSpore Lite
+- A person detector trained with MindYOLO on Huawei Cloud ModelArts, using the HIT-UAV thermal dataset. The training config, the guide in `training/README.md` and the slot that runs it on the unit with MindSpore Lite are ready
 - Using the RGB camera to confirm thermal hits and cut false alarms
-- Running the command center on Huawei Cloud ECS with an RDS database, behind HTTPS
+- Running the command center on Huawei Cloud ECS with an RDS for MySQL database, behind HTTPS. The Docker setup, MySQL support and the guide in `docs/DEPLOY.md` are ready, and checked automatically against MySQL 8.0 and Docker on every push
 - Live GPS, height, heading and camera tilt from the drone, in place of the values a caller passes in today
 - A map background from Huawei Map Kit or a self hosted server for real deployments. The page uses the public OpenStreetMap tiles unless `NEUSE_TILE_URL` is set, which need internet and are meant for light use
 
@@ -159,7 +158,10 @@ Layout
 - `src/metrics.py` - Precision, recall and mAP against labelled boxes
 - `src/hit_uav.py` - Reads the HIT-UAV labels
 - `dashboard/` - Local web dashboard
-- `command_center/` - Command center API that units sync to, the coordinator map page and situation reports
+- `command_center/` - Command center API that units sync to, the coordinator map page and situation reports, on SQLite or RDS for MySQL
+- `deploy/` - Docker and HTTPS setup for running the command center on a Huawei Cloud server
+- `training/` - MindYOLO config and guide for training on ModelArts
+- `src/mindyolo_detector.py` - Runs the trained MindYOLO model on the unit with MindSpore Lite
 - `scripts/simulate_feed.py` - Sends made up or real thermal frames through the pipeline for demos
 - `scripts/demo_units.py` - Flies several demo units at once against a command center
 - `scripts/evaluate_hit_uav.py` - Scores a detector on HIT-UAV
@@ -169,6 +171,7 @@ Layout
 - `models/` - Trained model files
 - `tests/` - Automated tests
 - `docs/ARCHITECTURE.md` - How the parts fit together
+- `docs/DEPLOY.md` - Step by step deployment on Huawei Cloud
 - `docs/PROGRESS.md` - Dated record of what was built, measured and decided
 
 Run it
@@ -255,7 +258,7 @@ HIT-UAV by Suo et al., Scientific Data 10, 227 (2023), shared under CC BY 4.0 at
 
 Settings
 
-- `NEUSE_DETECTOR` - `person-check` by default, or `warm-spots` for the first baseline
+- `NEUSE_DETECTOR` - `person-check` by default, `warm-spots` for the first baseline, or `mindyolo` for a model trained on ModelArts
 - `NEUSE_FRAME_SCALE` - Resizes frames before the person check, so people are about 15 pixels tall. Defaults to `1`
 - `NEUSE_CAMERA_FOV` - How wide the camera sees across and down the frame in degrees, like `45,37`. Used to place sightings on the ground
 - `NEUSE_DB` - Detection database, defaults to `neuse_local.db` in the project folder. Keep it out of folders that sync to the cloud, such as OneDrive
@@ -268,6 +271,8 @@ Settings
 - `NEUSE_CC_TOKEN` - Coordinator token for the command center, which can read and send
 - `NEUSE_CC_UNIT_TOKENS` - A token per unit, like `unit-1=abc,unit-2=def`, which can only send for that unit
 - `NEUSE_CC_DB` - Command center database, defaults to `command_center.db` in the project folder
+- `NEUSE_CC_DATABASE_URL` - RDS for MySQL in place of the SQLite file, like `mysql://user:password@host:3306/neuse`. Write `@` in the password as `%40`
+- `NEUSE_MINDYOLO_MODEL` and `NEUSE_MINDYOLO_THRESHOLD` - The trained MindYOLO model and the score its boxes need, see `training/README.md`
 - `NEUSE_CC_HOST` and `NEUSE_CC_PORT` - Command center address, defaults to `127.0.0.1` and `8000`. It will not open to a network with no token set
 - `NEUSE_TILE_URL` and `NEUSE_TILE_CREDIT` - Map background for the coordinator page and the credit line shown for it. Defaults to the public OpenStreetMap tiles
 - `NEUSE_LLM_URL`, `NEUSE_LLM_KEY` and `NEUSE_LLM_MODEL` - Optional OpenAI style chat API for situation reports, the base address ending before `/chat/completions`. Unset, reports come from the template

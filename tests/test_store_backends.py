@@ -21,6 +21,9 @@ def db(request, tmp_path):
         store.setup(path)
         return path
     if not mysql_url:
+        # ci sets NEUSE_TEST_MYSQL_REQUIRED so a missing database fails the run instead of passing quietly
+        if os.environ.get("NEUSE_TEST_MYSQL_REQUIRED"):
+            pytest.fail("NEUSE_TEST_MYSQL_REQUIRED is set but NEUSE_TEST_MYSQL_URL is not")
         pytest.skip("set NEUSE_TEST_MYSQL_URL to an empty test database to run the mysql checks")
     with store.session(mysql_url) as s:
         s.run("drop table if exists detections")

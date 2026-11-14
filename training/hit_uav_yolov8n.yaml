@@ -1,0 +1,26 @@
+# mindyolo config for a small yolov8 person detector on hit-uav
+# copy this file into mindyolo's configs/yolov8/ folder, next to yolov8n.yaml, see training/README.md
+# it starts from yolov8n and changes only what hit-uav needs
+
+__BASE__: [
+  './yolov8n.yaml',
+]
+
+# 200 rounds through the training images, the last 10 without mosaic, as mindyolo does for its own models
+epochs: 200
+per_batch_size: 16
+# hit-uav frames are 640 by 512, so 640 keeps every pixel of a person who is only about 14 by 15 pixels
+img_size: 640
+
+data:
+  dataset_name: hit_uav_person
+  # made by scripts/prepare_hit_uav.py with --data-root /home/ma-user/work/hit-uav-person
+  train_set: /home/ma-user/work/hit-uav-person/train.txt
+  val_set: /home/ma-user/work/hit-uav-person/val.txt
+  test_set: /home/ma-user/work/hit-uav-person/test.txt
+  nc: 1
+  names: [ 'person' ]
+
+  # the base config splits 500 rounds as 490 then 10, this matches the 200 above
+  train_transforms:
+    stage_epochs: [ 190, 10 ]

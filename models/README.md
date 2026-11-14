@@ -6,7 +6,7 @@ Training it again on the same computer gives exactly the same network weights. O
 
 Other trained model files are kept out of git. Files ending in `.mindir` and `.ms` are ignored.
 
-The plan is to train a MindYOLO person detector on Huawei Cloud ModelArts with the HIT-UAV thermal dataset, convert it to MindSpore Lite format and place it here. It has to beat the person check to replace it.
+The plan is to train a MindYOLO person detector on Huawei Cloud ModelArts with the HIT-UAV thermal dataset, convert it to MindSpore Lite format and place it here as `person_mindyolo.ms`. It has to beat the person check to replace it. The steps are in `training/README.md`.
 
 `scripts/prepare_hit_uav.py` prepares the training data. It keeps only the person labels and writes the dataset section of a MindYOLO config. Use `--data-root` to set where the folder will live on ModelArts.
 

@@ -148,6 +148,22 @@ A second check of the fixes before merging found four more, each tested and fixe
 
 Known limits - No HTTPS is built in, the command center needs a reverse proxy in front of it. The person check is tied to 640 by 512 frames from 60 to 130 m. Time per image on test footage is about 30 ms, and over 100 ms on a frame crowded with warm spots.
 
+2026-11-14 - Ready for Huawei Cloud, deployment and training kits
+
+Everything that does not need cloud access is built, so access turns straight into a live demo and a training run.
+
+- The command center works on RDS for MySQL as well as SQLite, chosen with one setting. The same storage checks run against both
+- A Docker image for the command center, with Caddy in front for HTTPS, and `docs/DEPLOY.md` with every step on ECS and RDS
+- Every push now also runs the storage checks against a real MySQL 8.0 and builds and tries the Docker image. All three passed on the first push
+- A MindYOLO config for HIT-UAV in `training/`, starting from YOLOv8n trained on COCO, with a step by step guide for ModelArts, the export and the conversion for MindSpore Lite
+- A `mindyolo` detector slot on the unit that runs the converted model with MindSpore Lite and decodes its output as MindYOLO's YOLOv8 head gives it. It accepts boxes listed either way round. If the model or MindSpore Lite is missing, the unit falls back to the person check
+- The scoring scripts score the MindYOLO model exactly as they score the person check
+- A bug found while writing the deployment file was fixed. A setting left empty, such as `NEUSE_TILE_URL=`, used to leave the map with no background
+
+Decision - The MindYOLO slot is tested only with a stand in for the model, built from MindYOLO's own YOLOv8 code, since MindSpore Lite is not available on the team's laptop. The first real export must be checked against it.
+
+Decision - MindYOLO moved from GitHub to Gitee, at https://gitee.com/mindspore-lab/mindyolo. The guide points there.
+
 Next
 
 - Command center on Huawei Cloud ECS with RDS, behind HTTPS
