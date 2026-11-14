@@ -28,6 +28,7 @@ def db(request, tmp_path):
     with store.session(mysql_url) as s:
         s.run("drop table if exists detections")
         s.run("drop table if exists units")
+        s.run("drop table if exists coverage")
     store.setup(mysql_url)
     # running setup twice must be harmless
     store.setup(mysql_url)
@@ -123,3 +124,18 @@ def test_mysql_address_is_read_with_coded_characters():
     for bad in ("mysql://db.example.org/neuse", "mysql://neuse:x@db.example.org/", "mysql:///neuse"):
         with pytest.raises(ValueError):
             store.mysql_settings(bad)
+
+
+def test_coverage_keeps_the_newest_time_and_counts_units(db):
+    now = datetime.now(timezone.utc)
+    newer = (now - timedelta(minutes=1)).isoformat(timespec="seconds")
+    older = (now - timedelta(minutes=40)).isoformat(timespec="seconds")
+    assert store.save_coverage(db, "unit-1", [[1, 2, newer], [1, 3, older]]) == 2
+    store.save_coverage(db, "unit-1", [[1, 2, older]])
+    store.save_coverage(db, "unit-2", [[1, 2, older]])
+    cells = {(c["cell_row"], c["cell_col"]): c for c in store.coverage(db)}
+    assert cells[(1, 2)]["last_seen"] == datetime.fromisoformat(newer).isoformat(timespec="seconds")
+    assert int(cells[(1, 2)]["units"]) == 2 and int(cells[(1, 3)]["units"]) == 1
+    # only squares covered since a time
+    assert len(store.coverage(db, (now - timedelta(minutes=10)).isoformat(timespec="seconds"))) == 1
+

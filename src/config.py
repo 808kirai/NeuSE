@@ -50,6 +50,7 @@ class config:
     # which detector the pipeline runs
     # person-check finds small warm spots and scores each one with a small trained check, the default
     # warm-spots is the first baseline, any bright area of the right size, kept for comparison and the demo feed
+    # person-cnn scores warm spots with a small convolutional network trained with mindspore on a laptop
     # mindyolo runs a model trained on modelarts, see training/README.md
     detector = os.environ.get("NEUSE_DETECTOR", "person-check")
 
@@ -60,6 +61,9 @@ class config:
     # frames are resized by this factor before the person check so people land near that size
     # e.g. 0.5 for a camera where people look twice as big, boxes are scaled back afterwards
     frame_scale = float(os.environ.get("NEUSE_FRAME_SCALE", 1.0))
+
+    # weights for the person cnn, made with mindspore by scripts/train_person_cnn.py
+    person_cnn_path = project_root / "models" / "person_cnn.npz"
 
     # the mindyolo model converted for mindspore lite, used when the detector is mindyolo
     mindyolo_path = Path(os.environ.get("NEUSE_MINDYOLO_MODEL", project_root / "models" / "person_mindyolo.ms"))

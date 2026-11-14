@@ -92,7 +92,7 @@ class link:
 
 
 def run_unit(images, index, units, base, send, send_status, radio, frames, fps=1.0, sync_every=3,
-             sleep=time.sleep, say=print):
+             sleep=time.sleep, say=print, send_coverage=None):
     # flies one unit for frames frames and returns how many sightings it made
     # the database and unit name come from config, which the parent sets for each process
     from src import sync
@@ -119,16 +119,21 @@ def run_unit(images, index, units, base, send, send_status, radio, frames, fps=1
                 send_status(sync.status_note())
             except sync.send_error:
                 pass
+            if send_coverage is not None and not result["error"]:
+                sync.sync_coverage(send_coverage)
             if result["synced"]:
                 say(f"{config.unit_id} sent {result['synced']}")
         sleep(1 / fps)
 
     # land with everything sent so the demo ends with a complete picture
+    pipe.flush()
     sync.sync_once(send)
     try:
         send_status(sync.status_note())
     except sync.send_error:
         pass
+    if send_coverage is not None:
+        sync.sync_coverage(send_coverage)
     say(f"{config.unit_id} done, {found} sightings, {sync.pending_count()} still waiting")
     return found
 
@@ -142,7 +147,7 @@ def worker(args):
     radio = link(random.Random(args.seed + args.index), args.drop_chance)
     run_unit(images, args.index, args.units, (args.lat, args.lon),
              sync.http_sender(args.center, args.token), sync.http_status_sender(args.center, args.token),
-             radio, args.frames, fps=args.fps)
+             radio, args.frames, fps=args.fps, send_coverage=sync.http_coverage_sender(args.center, args.token))
 
 
 def main():

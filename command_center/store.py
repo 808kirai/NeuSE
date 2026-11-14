@@ -92,6 +92,33 @@ mysql_units_schema = """
     ) engine=innodb default charset=utf8mb4
 """
 
+# ground squares each unit's camera has covered, about 22 m across, see src/geo.py on the unit
+coverage_schema = """
+    create table if not exists coverage (
+        unit_id text not null,
+        cell_row integer not null,
+        cell_col integer not null,
+        last_seen text not null,
+        primary key (unit_id, cell_row, cell_col)
+    )
+"""
+
+mysql_coverage_schema = """
+    create table if not exists coverage (
+        unit_id varchar(64) not null,
+        cell_row int not null,
+        cell_col int not null,
+        last_seen varchar(32) not null,
+        primary key (unit_id, cell_row, cell_col),
+        index coverage_seen (last_seen)
+    ) engine=innodb default charset=utf8mb4
+"""
+
+# size of a coverage square in degrees, the same as src/geo.py on the unit
+cell_degrees = 0.0002
+# most squares one request may carry
+max_cells = 5000
+
 # columns added to the units table later, so older sqlite databases get them on startup
 new_unit_columns = {"refused": "integer", "detector_idle_s": "real"}
 
@@ -181,6 +208,7 @@ def setup(db):
         with session(db) as s:
             s.run(mysql_schema)
             s.run(mysql_units_schema)
+            s.run(mysql_coverage_schema)
         return
 
     with closing(connect(db)) as conn:
@@ -215,6 +243,8 @@ def setup(db):
                 conn.execute("drop table detections_old")
 
             conn.execute(units_schema)
+            conn.execute(coverage_schema)
+            conn.execute("create index if not exists coverage_seen on coverage (last_seen)")
             existing = {row[1] for row in conn.execute("pragma table_info(units)")}
             for name, kind in new_unit_columns.items():
                 if name not in existing:
@@ -445,6 +475,71 @@ def sightings_between(db, start, end):
             select unit_id, timestamp_utc, latitude, longitude, confidence, position_source
             from detections where timestamp_utc >= ? and timestamp_utc <= ?
         """, (start, end))
+
+
+def coverage_problem(payload):
+    # returns why a batch of covered squares cannot be stored, or None when it is fine
+    if not isinstance(payload, dict):
+        return "coverage must be an object"
+    if not isinstance(payload.get("unit_id"), str) or not unit_pattern.match(payload["unit_id"]):
+        return "unit_id must be 1 to 64 letters, digits, dots, dashes or underscores"
+    cells = payload.get("cells")
+    if not isinstance(cells, list) or len(cells) > max_cells:
+        return f"cells must be a list of at most {max_cells}"
+    # a square's row and column are latitude and longitude divided by the square size
+    rows, cols = int(90 / cell_degrees), int(180 / cell_degrees)
+    for cell in cells:
+        if not (isinstance(cell, list) and len(cell) == 3 and whole_signed(cell[0], rows)
+                and whole_signed(cell[1], cols) and isinstance(cell[2], str) and parse_time(cell[2]) is not None):
+            return "each cell must be [row, column, last seen time with a utc offset]"
+    return None
+
+
+def whole_signed(value, limit):
+    return isinstance(value, int) and not isinstance(value, bool) and -limit <= value <= limit
+
+
+def corrected(moment, sent_at, now):
+    # a time from the unit moved by the gap between its clock and this computer's, never later than now
+    if sent_at is None:
+        return moment
+    offset = (now - sent_at).total_seconds()
+    if abs(offset) <= clock_tolerance:
+        return moment
+    try:
+        return min(moment + timedelta(seconds=offset), now)
+    except OverflowError:
+        return now
+
+
+def save_coverage(db, unit_id, cells, sent_at=None, now=None):
+    # keeps the latest time each unit covered each square, an older report never replaces a newer one
+    # sent_at is the unit's clock when it sent them, used to correct a unit whose clock is wrong
+    now = now or datetime.now(timezone.utc)
+    rows = [(unit_id, row, col, corrected(parse_time(seen), sent_at, now).isoformat(timespec="seconds"))
+            for row, col, seen in cells]
+    with session(db) as s:
+        if s.mysql:
+            s.many("""
+                insert into coverage (unit_id, cell_row, cell_col, last_seen) values (?, ?, ?, ?)
+                on duplicate key update last_seen = greatest(last_seen, values(last_seen))
+            """, rows)
+        else:
+            s.many("""
+                insert into coverage (unit_id, cell_row, cell_col, last_seen) values (?, ?, ?, ?)
+                on conflict (unit_id, cell_row, cell_col) do update set last_seen = max(last_seen, excluded.last_seen)
+            """, rows)
+    return len(rows)
+
+
+def coverage(db, since=None):
+    # covered squares across all units, each with the latest time any unit covered it and how many units did
+    with session(db) as s:
+        return s.rows("""
+            select cell_row, cell_col, max(last_seen) as last_seen, count(*) as units
+            from coverage where last_seen >= ?
+            group by cell_row, cell_col
+        """, (since or "",))
 
 
 def count(db):

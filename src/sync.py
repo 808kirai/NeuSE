@@ -149,6 +149,42 @@ def http_sender(url, token=None, timeout=15, insecure=None):
     return lambda detections: post({"sent_at": now(), "detections": detections})
 
 
+def http_coverage_sender(url, token=None, timeout=15, insecure=None):
+    # returns a function that posts ground squares the unit has covered
+    # sent_at lets the command center correct the times from a unit whose clock is wrong, as for detections
+    post = poster(url, "/api/v1/coverage", token, timeout, insecure)
+    return lambda cells: post({"unit_id": config.unit_id, "sent_at": now(), "cells": cells})
+
+
+def pending_coverage(limit=2000):
+    # covered ground squares the command center does not have yet, newest first
+    with closing(connect()) as conn:
+        return [list(row) for row in conn.execute("""
+            select cell_row, cell_col, last_seen from coverage where synced = 0
+            order by last_seen desc limit ?
+        """, (limit,))]
+
+
+def sync_coverage(send_coverage, batch=2000):
+    # sends covered squares a batch at a time, returns how many were sent or None when the link failed
+    sent = 0
+    while True:
+        cells = pending_coverage(batch)
+        if not cells:
+            return sent
+        try:
+            reply = send_coverage(cells)
+        except send_error:
+            return None
+        if not isinstance(reply, dict) or reply.get("saved") != len(cells):
+            return None
+        with closing(connect()) as conn, conn:
+            # only squares not seen again while they were being sent are marked as sent
+            conn.executemany("update coverage set synced = 1 where cell_row = ? and cell_col = ? and last_seen = ?",
+                             [tuple(cell) for cell in cells])
+        sent += len(cells)
+
+
 def http_status_sender(url, token=None, timeout=15, insecure=None):
     # returns a function that posts the unit's status note
     return poster(url, "/api/v1/status", token, timeout, insecure)
@@ -220,9 +256,10 @@ def retry_wait(failures, interval, max_wait, jitter):
 
 
 def run(send, interval=None, max_wait=None, stop=lambda: False, sleep=time.sleep, jitter=random.random,
-        send_status=None):
+        send_status=None, send_coverage=None):
     # keeps syncing until stop() is true
     # send_status, when given, also posts the unit's status note each round
+    # send_coverage, when given, also posts the ground squares the camera has covered
     # after a failure the wait doubles up to max_wait, and goes back to interval once a sync works
     interval = interval or config.sync_interval
     max_wait = max_wait or config.sync_max_wait
@@ -236,6 +273,8 @@ def run(send, interval=None, max_wait=None, stop=lambda: False, sleep=time.sleep
             except send_error:
                 # the detections are what matter, a missed status note is simply sent next round
                 pass
+        if send_coverage is not None and not result["error"]:
+            sync_coverage(send_coverage)
         if result["refused"]:
             log.warning("the command center refused %s detections, %s are now held on this unit, "
                         "fix the cause then run python -m src.sync --retry-refused", result["refused"], refused_count())
@@ -276,6 +315,7 @@ def main():
     try:
         send = http_sender(args.url, args.token)
         send_status = http_status_sender(args.url, args.token)
+        send_coverage = http_coverage_sender(args.url, args.token)
     except ValueError as err:
         parser.error(str(err))
 
@@ -290,11 +330,13 @@ def main():
             send_status(status_note())
         except send_error:
             pass
+        if not result["error"]:
+            sync_coverage(send_coverage)
         print(f"sent {result['synced']}, refused {result['refused']}, still queued {result['pending']}" +
               (f", {result['error']}" if result["error"] else ""))
         return
     log.info("unit %s syncing to %s", config.unit_id, args.url)
-    run(send, interval=args.interval, send_status=send_status)
+    run(send, interval=args.interval, send_status=send_status, send_coverage=send_coverage)
 
 
 if __name__ == "__main__":

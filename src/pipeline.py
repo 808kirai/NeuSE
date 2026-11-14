@@ -6,10 +6,11 @@ from collections import deque
 import cv2
 import numpy as np
 from src.config import config
-from src.geo import ground_position
-from src.logger import data_logger, now
+from src.geo import cells_in, footprint, ground_position
+from src.logger import data_logger, note_coverage, now
 from src.mindyolo_detector import mindyolo_detector
 from src.person_check import person_check
+from src.person_cnn import person_cnn
 
 # warnings about skipped frames go to the standard python log
 log = logging.getLogger(__name__)
@@ -19,7 +20,10 @@ log = logging.getLogger(__name__)
 detector_name = "warm-spots"
 person_check_name = "person-check"
 mindyolo_name = "mindyolo"
-detectors = (person_check_name, detector_name, mindyolo_name)
+person_cnn_name = "person-cnn"
+detectors = (person_check_name, person_cnn_name, detector_name, mindyolo_name)
+# detectors trained on hit-uav's 640 by 512 frames, which work on frames of that kind
+classical_trained = (person_check_name, person_cnn_name)
 
 # frame size the person check was trained on, width and height
 trained_size = (640, 512)
@@ -27,8 +31,9 @@ trained_size = (640, 512)
 max_unsaved = 5000
 
 
-# finds people in thermal frames with one of three detectors
+# finds people in thermal frames with one of four detectors
 # person-check scores small warm spots with a small trained check and gives a confidence
+# person-cnn scores warm spots at two sizes with a small convolutional network trained with mindspore
 # warm-spots flags any bright area of the right size and gives no confidence
 # mindyolo runs a yolov8 model trained on modelarts with mindspore lite, see training/README.md
 # the rgb frame is accepted but not used yet
@@ -50,6 +55,8 @@ class thermal_pipeline:
         self.unsaved = []
         # so the frame size warning shows once
         self.warned_about_size = False
+        # ground squares covered since they were last saved, (row, col) to (last seen, frames)
+        self.covered = {}
 
         # pick the detector, the person check needs its trained weights
         self.detector = detector or config.detector
@@ -64,6 +71,13 @@ class thermal_pipeline:
             except (ImportError, OSError, RuntimeError, ValueError) as err:
                 # keep detecting with the person check instead of stopping the unit
                 log.warning("could not load the mindyolo model, using person-check, %s", err)
+                self.detector = person_check_name
+        if self.detector == person_cnn_name:
+            try:
+                self.checker = person_cnn(config.person_cnn_path, config.max_candidates)
+            except (OSError, KeyError, ValueError) as err:
+                # keep detecting with the person check instead of stopping the unit
+                log.warning("could not load the person cnn, using person-check, %s", err)
                 self.detector = person_check_name
         if self.detector == person_check_name:
             if config.person_check_path.exists():
@@ -90,17 +104,42 @@ class thermal_pipeline:
         if hits:
             self._place(hits, thermal_frame, position, pose)
         self._save(hits, position)
+        self._cover(thermal_frame, position, pose)
 
         # a short status note every few seconds, not every frame, so the disk is not kept busy
         self.frames += 1
+        self.last_position = position
         if time.monotonic() - self.last_status >= config.status_every:
-            try:
-                self.logger.note_status(position, self.detector, self.frames,
-                                        sum(self.recent_ms) / len(self.recent_ms))
-            except sqlite3.Error as err:
-                log.warning("could not save the status note, %s", err)
-            self.last_status = time.monotonic()
+            self.flush()
         return hits
+
+    def flush(self):
+        # saves the status note and the ground covered since the last save
+        # called every few seconds, and once more when a unit stops so nothing is left in memory
+        try:
+            average = sum(self.recent_ms) / len(self.recent_ms) if self.recent_ms else None
+            self.logger.note_status(getattr(self, "last_position", None), self.detector, self.frames, average)
+            if self.covered:
+                note_coverage(self.covered)
+                self.covered = {}
+        except sqlite3.Error as err:
+            # covered squares stay in memory and are saved with a later note
+            log.warning("could not save the status note, %s", err)
+        self.last_status = time.monotonic()
+
+    def _cover(self, frame, position, pose):
+        # marks the ground squares this frame covered, so coordinators can see what has been searched
+        # needs the unit's height, heading and camera tilt, without them there is no footprint
+        if pose is None or not isinstance(frame, np.ndarray) or frame.ndim < 2:
+            return
+        unit = position or (config.default_lat, config.default_lon)
+        corners = footprint(unit, pose, (frame.shape[1], frame.shape[0]), config.camera_fov, config.max_ground_range)
+        if corners is None:
+            return
+        seen = now()
+        for cell in cells_in(corners):
+            frames = self.covered.get(cell, (seen, 0))[1]
+            self.covered[cell] = (seen, frames + 1)
 
     def _place(self, hits, frame, position, pose):
         # gives each hit a position, on the ground when the pose allows it and at the unit otherwise
@@ -191,16 +230,16 @@ class thermal_pipeline:
 
         # resize so people are about the size the person check was trained on, boxes are scaled back below
         # mindyolo fits any frame to its own input size, so it gets the frame as it is
-        scale = config.frame_scale if self.detector == person_check_name else 1.0
+        scale = config.frame_scale if self.detector in classical_trained else 1.0
         work = thermal_gray
         if scale != 1.0:
             size = (max(1, round(width * scale)), max(1, round(height * scale)))
             work = cv2.resize(thermal_gray, size, interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
-        if (self.detector == person_check_name and not self.warned_about_size
+        if (self.detector in classical_trained and not self.warned_about_size
                 and (work.shape[1], work.shape[0]) != trained_size):
-            log.warning("the person check was trained on %s by %s frames where a person is about 15 pixels tall, "
+            log.warning("the %s detector was trained on %s by %s frames where a person is about 15 pixels tall, "
                         "this frame is %s by %s, set NEUSE_FRAME_SCALE if people look much bigger or smaller",
-                        *trained_size, work.shape[1], work.shape[0])
+                        self.detector, *trained_size, work.shape[1], work.shape[0])
             self.warned_about_size = True
 
         # opencv or numpy can still reject odd frames, so skip them instead of crashing

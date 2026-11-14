@@ -44,6 +44,19 @@ status_schema = """
     )
 """
 
+# the ground squares this unit's camera has covered, about 22 m across, see src/geo.py
+# synced is 0 until the command center has the square's latest time
+coverage_schema = """
+    create table if not exists coverage (
+        cell_row integer,
+        cell_col integer,
+        last_seen text,
+        frames integer,
+        synced integer default 0,
+        primary key (cell_row, cell_col)
+    )
+"""
+
 # columns added later, so older databases get them on startup
 new_columns = {
     "detections": {
@@ -96,6 +109,7 @@ class data_logger:
             conn.execute("pragma journal_mode=wal")
             conn.execute(schema)
             conn.execute(status_schema)
+            conn.execute(coverage_schema)
 
             # add any column an older table is missing
             for table, columns in new_columns.items():
@@ -151,6 +165,17 @@ class data_logger:
                     longitude = excluded.longitude, detector = excluded.detector, frames = excluded.frames,
                     avg_latency_ms = excluded.avg_latency_ms
             """, (now(), lat, lon, detector, frames, avg_latency_ms))
+
+
+def note_coverage(cells):
+    # saves ground squares the camera covered, cells maps (row, col) to (last seen time, frames)
+    # a square seen again is marked unsent so its newer time reaches the command center
+    with closing(connect()) as conn, conn:
+        conn.executemany("""
+            insert into coverage (cell_row, cell_col, last_seen, frames, synced) values (?, ?, ?, ?, 0)
+            on conflict (cell_row, cell_col) do update set last_seen = excluded.last_seen,
+                frames = coverage.frames + excluded.frames, synced = 0
+        """, [(row, col, seen, frames) for (row, col), (seen, frames) in cells.items()])
 
 
 def read_status():

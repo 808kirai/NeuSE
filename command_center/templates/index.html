@@ -19,6 +19,7 @@
             --fresh: #F87171;
             --recent: #FB923C;
             --old: #FACC15;
+            --searched: #60A5FA;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -105,6 +106,10 @@
         .backlog { color: var(--recent); }
 
         .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+
+        .square { width: 10px; height: 10px; display: inline-block; flex: none; opacity: 0.6; }
+
+        .legend label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 
         .legend span { display: flex; align-items: center; gap: 6px; }
 
@@ -196,6 +201,8 @@
                 <span><i class="dot" style="background: var(--fresh)"></i>Sighting, last 5 min</span>
                 <span><i class="dot" style="background: var(--recent)"></i>Last hour</span>
                 <span><i class="dot" style="background: var(--old)"></i>Older</span>
+                <label><input type="checkbox" id="show-searched" checked>
+                    <i class="square" style="background: var(--searched)"></i>Searched in the last 24 hours</label>
             </div>
             <h2>Situation report</h2>
             <div class="report">
@@ -253,7 +260,8 @@
         // the lists still work when the map library or its background cannot load
         let map = null;
         if (window.L) {
-            map = L.map('map', { zoomControl: true }).setView([0, 20], 3);
+            // drawn on a canvas, so thousands of searched squares stay quick
+            map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([0, 20], 3);
             const background = L.tileLayer(tiles, { maxZoom: 19, attribution: plain(tilesCredit) }).addTo(map);
             background.once('tileerror', () =>
                 mapNote('The map background could not load. Units and sightings are still shown in the right places.'));
@@ -398,6 +406,33 @@
             }
         }
 
+        // ground the units' cameras have covered, refreshed less often than sightings since it changes slowly
+        let searchedLayer = null;
+        let lastSearched = 0;
+
+        async function drawSearched() {
+            if (!map || Date.now() - lastSearched < 15000) return;
+            lastSearched = Date.now();
+            const data = await api('/api/v1/coverage?hours=24');
+            if (!searchedLayer) searchedLayer = L.layerGroup().addTo(map);
+            searchedLayer.clearLayers();
+            const colour = getComputedStyle(document.documentElement).getPropertyValue('--searched').trim();
+            const size = data.cell_degrees;
+            for (const cell of data.cells) {
+                const minutes = (Date.now() - new Date(cell.last_seen).getTime()) / 60000;
+                // more recent search, stronger shade
+                const shade = minutes < 5 ? 0.35 : minutes < 60 ? 0.25 : 0.12;
+                L.rectangle([[cell.cell_row * size, cell.cell_col * size], [(cell.cell_row + 1) * size, (cell.cell_col + 1) * size]],
+                            { stroke: false, fillColor: colour, fillOpacity: shade, interactive: false }).addTo(searchedLayer);
+            }
+            if (!document.getElementById('show-searched').checked) map.removeLayer(searchedLayer);
+        }
+
+        document.getElementById('show-searched').addEventListener('change', (event) => {
+            if (!searchedLayer) return;
+            if (event.target.checked) searchedLayer.addTo(map); else map.removeLayer(searchedLayer);
+        });
+
         function fitOnce() {
             // zoom to everything the first time there is something to show
             if (fitted || !map) return;
@@ -423,6 +458,8 @@
                 drawUnits(unitData.units);
                 drawHits();
                 fitOnce();
+                // searched ground is extra, so a failure there leaves the rest of the page working
+                try { await drawSearched(); } catch (e) { lastSearched = 0; }
                 const online = unitData.units.filter(u => u.online).length;
                 document.getElementById('summary').textContent =
                     online + ' of ' + unitData.units.length + ' units online, ' + unitData.detections + ' sightings';

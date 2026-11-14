@@ -21,7 +21,7 @@ import json
 import os
 import sys
 import zlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -187,6 +187,42 @@ def create_app(db_path=None, token=None, llm=None, unit_tokens=None):
             return jsonify({"error": f"this token only sends for {caller}"}), 403
         store.save_status(db, note)
         return jsonify({"ok": True})
+
+    @app.post("/api/v1/coverage")
+    def receive_coverage():
+        # ground squares a unit's camera has covered, so coordinators can see what has been searched
+        caller = who()
+        if caller is None:
+            return refuse()
+        payload = read_body()
+        if payload is None:
+            return jsonify({"error": "body must be json, optionally gzipped"}), 400
+        problem = store.coverage_problem(payload)
+        if problem:
+            return jsonify({"error": problem}), 400
+        if caller is not True and payload["unit_id"] != caller:
+            return jsonify({"error": f"this token only sends for {caller}"}), 403
+        sent_at = None
+        if payload.get("sent_at") is not None:
+            sent_at = store.parse_time(payload["sent_at"])
+            if sent_at is None:
+                return jsonify({"error": "sent_at must be an iso time with a utc offset"}), 400
+        return jsonify({"saved": store.save_coverage(db, payload["unit_id"], payload["cells"], sent_at)})
+
+    @app.get("/api/v1/coverage")
+    def searched():
+        # covered squares for the map, hours sets how far back to look, at most a week
+        denied = readers_only()
+        if denied:
+            return denied
+        try:
+            hours = float(request.args.get("hours", 24))
+        except ValueError:
+            return jsonify({"error": "hours must be a number"}), 400
+        if not 0 < hours <= 168:
+            return jsonify({"error": "hours must be above 0 and at most 168"}), 400
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(timespec="seconds")
+        return jsonify({"cell_degrees": store.cell_degrees, "cells": store.coverage(db, since)})
 
     @app.get("/api/v1/units")
     def units():

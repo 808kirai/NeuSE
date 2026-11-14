@@ -18,3 +18,6 @@ deploy/.env
 # exported model binaries
 models/*.mindir
 models/*.ms
+
+# mindspore writes its compile logs here
+rank_0/

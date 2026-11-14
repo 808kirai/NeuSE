@@ -68,6 +68,10 @@ def gather(db, minutes=30, now=None, online_window=60, detecting_window=30):
     now = (now or datetime.now(timezone.utc)).replace(microsecond=0)
     start = (now - timedelta(minutes=minutes)).isoformat()
     sightings = store.sightings_between(db, start, now.isoformat())
+    # ground covered in the window, as square metres, squares narrow away from the equator
+    covered = store.coverage(db, start)
+    side = store.cell_degrees * metres_per_degree
+    searched_m2 = sum(side * side * math.cos(math.radians((c["cell_row"] + 0.5) * store.cell_degrees)) for c in covered)
 
     units = []
     for unit in store.units(db):
@@ -112,6 +116,8 @@ def gather(db, minutes=30, now=None, online_window=60, detecting_window=30):
         "generated_at": now.isoformat(timespec="seconds"),
         "window_minutes": minutes,
         "sightings": len(sightings),
+        # ground the units' cameras covered in the window, worked out from their height, heading and tilt
+        "searched_km2": round(searched_m2 / 1e6, 3),
         # sightings placed at the unit itself because it gave no height, heading and camera tilt
         # the person can be a few hundred metres from such a position
         "sightings_placed_at_unit": sum(1 for s in sightings if s["position_source"] != "projected"),
@@ -143,6 +149,10 @@ def write_template(facts):
         if unit["refused_on_unit"]:
             lines.append(f"{unit['unit_id']} holds {count(unit['refused_on_unit'], 'sighting')} the command center "
                          "refused, that unit needs checking.")
+
+    if facts["searched_km2"]:
+        lines.append(f"About {facts['searched_km2']:.2f} square km searched in this window. "
+                     "Ground outside the shaded squares on the map has not been covered.")
 
     if not facts["areas"]:
         lines.append("No sightings of people in this window.")
@@ -176,6 +186,7 @@ instructions = (
     "Start with what needs attention first, such as recent areas with many sightings, silent units with "
     "sightings still waiting to send, units in contact whose detector has stopped and units holding refused "
     "sightings. Say so when sightings are only placed at the unit's own position. "
+    "Say how much ground was searched when searched_km2 is above 0. "
     "Give coordinates as they appear. Use plain sentences, at most 150 words."
 )
 

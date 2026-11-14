@@ -68,3 +68,58 @@ def ground_position(position, pose, box, frame_size, fov, max_range):
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
         return None
     return lat, lon
+
+
+# size of a coverage square in degrees, about 22 m at the equator
+cell_degrees = 0.0002
+
+
+def footprint(position, pose, frame_size, fov, max_range):
+    # the four ground corners the frame covers, as latitude and longitude, or None when they cannot be worked out
+    # corners go top left, top right, bottom right, bottom left of the picture
+    # a frame whose top edge looks at or past the horizon has no closed footprint, so it gives None
+    width, height = frame_size
+    corners = [(0, 0), (width, 0), (width, height), (0, height)]
+    points = [ground_position(position, pose, [x, y, 0, 0], frame_size, fov, max_range) for x, y in corners]
+    return None if any(p is None for p in points) else points
+
+
+def cell_of(lat, lon):
+    # the coverage square a point falls in, as whole numbers
+    return math.floor(lat / cell_degrees), math.floor(lon / cell_degrees)
+
+
+def cell_area(row):
+    # area of one coverage square in square metres, squares get narrower away from the equator
+    lat = (row + 0.5) * cell_degrees
+    side = cell_degrees * metres_per_degree
+    return side * side * math.cos(math.radians(lat))
+
+
+def inside(point, polygon):
+    # true when a point is inside a polygon, by counting edge crossings
+    lat, lon = point
+    hit = False
+    for (lat1, lon1), (lat2, lon2) in zip(polygon, polygon[1:] + polygon[:1]):
+        if (lat1 > lat) != (lat2 > lat):
+            crossing = lon1 + (lat - lat1) * (lon2 - lon1) / (lat2 - lat1)
+            if lon < crossing:
+                hit = not hit
+    return hit
+
+
+def cells_in(polygon, most=20000):
+    # every coverage square whose centre lies inside the footprint
+    # most stops a wildly large footprint from filling the memory
+    lats = [p[0] for p in polygon]
+    lons = [p[1] for p in polygon]
+    low_row, low_col = cell_of(min(lats), min(lons))
+    high_row, high_col = cell_of(max(lats), max(lons))
+    if (high_row - low_row + 1) * (high_col - low_col + 1) > most:
+        return set()
+    found = set()
+    for row in range(low_row, high_row + 1):
+        for col in range(low_col, high_col + 1):
+            if inside(((row + 0.5) * cell_degrees, (col + 0.5) * cell_degrees), polygon):
+                found.add((row, col))
+    return found
