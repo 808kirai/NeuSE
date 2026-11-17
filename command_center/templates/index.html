@@ -8,28 +8,59 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='leaflet/leaflet.css') }}">
     <script src="{{ url_for('static', filename='leaflet/leaflet.js') }}"></script>
     <style>
-        :root {
-            --bg: #1B191A;
-            --text: #FEFEFE;
-            --muted: rgba(254, 254, 254, 0.55);
-            --border: rgba(254, 254, 254, 0.12);
-            --card: rgba(254, 254, 254, 0.03);
-            --online: #4ADE80;
-            --offline: #9CA3AF;
-            --fresh: #F87171;
-            --recent: #FB923C;
-            --old: #FACC15;
-            --searched: #60A5FA;
-        }
-
         * { box-sizing: border-box; margin: 0; padding: 0; }
-
         html, body { height: 100%; }
 
+        :root {
+            color-scheme: dark;
+            --bg: #0B1215;
+            --surface: #121D21;
+            --raised: #1B292E;
+            --text: #F3F7F6;
+            --muted: #B7C4C6;
+            --border: #687A80;
+            --accent: #57D9CC;
+            --online: #80DDA8;
+            --offline: #B7C4C6;
+            --fresh: #63DCE8;
+            --recent: #90BFFF;
+            --old: #B7C4C6;
+            --searched: #67A9F2;
+            --review: #FFD07A;
+            --error: #FF8181;
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-6: 24px;
+            --radius: 12px;
+        }
+
+        [data-theme="day"] {
+            color-scheme: light;
+            --bg: #F2F5F3;
+            --surface: #FFFFFF;
+            --raised: #E6ECE9;
+            --text: #142126;
+            --muted: #4C5F63;
+            --border: #6D7B7F;
+            --accent: #006F69;
+            --online: #126B3F;
+            --offline: #4C5F63;
+            --fresh: #006C84;
+            --recent: #0057A3;
+            --old: #4C5F63;
+            --searched: #245D91;
+            --review: #7A4900;
+            --error: #A12226;
+        }
+
         body {
-            background-color: var(--bg);
+            height: 100vh;
+            min-height: 620px;
+            background: var(--bg);
             color: var(--text);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
             display: flex;
             flex-direction: column;
             -webkit-font-smoothing: antialiased;
@@ -40,154 +71,281 @@
             flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
-            gap: 4px 12px;
-            padding: 14px 20px;
+            flex: none;
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border);
+            gap: 12px 24px;
+        }
+
+        header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+        .brand-subtitle { margin-top: 2px; color: var(--muted); font-size: 14px; }
+        .header-meta { display: flex; align-items: center; gap: 16px; }
+        .summary { color: var(--muted); font-size: 14px; }
+
+        .live-status {
+            display: inline-flex;
+            align-items: center;
+            min-height: 40px;
+            gap: 8px;
+            padding: 7px 12px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--surface);
+            font-size: 14px;
+        }
+
+        .live-status::before {
+            content: "";
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--online);
+        }
+
+        .live-status[data-state="error"]::before { background: var(--error); }
+
+        .overview {
+            flex: none;
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 10px;
+            padding: 12px 20px;
             border-bottom: 1px solid var(--border);
         }
 
-        h1 { font-size: 18px; font-weight: 600; }
+        .overview-card {
+            min-width: 0;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface);
+        }
 
-        .summary { font-size: 13px; color: var(--muted); }
+        .overview-label { display: block; color: var(--muted); font-size: 13px; }
+        .overview-value {
+            display: block;
+            margin-top: 3px;
+            font-size: 23px;
+            font-weight: 700;
+            line-height: 1.2;
+            font-variant-numeric: tabular-nums lining-nums;
+        }
 
         main { flex: 1; display: flex; min-height: 0; min-width: 0; }
-
-        #map-wrap { flex: 1; min-height: 300px; position: relative; }
-
+        #map-wrap { flex: 1; min-height: 300px; position: relative; background: var(--raised); }
         #map { position: absolute; inset: 0; }
-
         #map-note {
             position: absolute;
             left: 50%;
-            bottom: 28px;
-            transform: translateX(-50%);
+            bottom: 20px;
             z-index: 1000;
             display: none;
             max-width: 90%;
-            padding: 8px 12px;
-            border-radius: 6px;
-            background: rgba(27, 25, 26, 0.92);
+            transform: translateX(-50%);
+            padding: 10px 14px;
             border: 1px solid var(--border);
-            font-size: 13px;
+            border-radius: 8px;
+            background: var(--surface);
+            color: var(--text);
+            font-size: 14px;
             text-align: center;
         }
 
         aside {
-            width: 340px;
-            border-left: 1px solid var(--border);
+            width: 390px;
+            padding: 14px;
             overflow-y: auto;
-            padding: 16px;
+            border-left: 1px solid var(--border);
+            background: var(--bg);
         }
 
-        h2 {
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: var(--muted);
-            margin: 4px 0 10px;
-        }
-
-        .unit, .hit {
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 14px;
+            margin: 0 0 18px;
+            padding: 12px;
             border: 1px solid var(--border);
-            background: var(--card);
-            border-radius: 8px;
-            padding: 10px 12px;
-            margin-bottom: 8px;
+            border-radius: 10px;
+            background: var(--surface);
+            color: var(--muted);
             font-size: 13px;
+        }
+
+        .legend input { width: 18px; height: 18px; accent-color: var(--accent); }
+        .legend label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 32px;
             cursor: pointer;
         }
 
-        .unit-name { font-weight: 600; display: flex; align-items: center; gap: 8px; }
-
-        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
-
-        .meta { color: var(--muted); margin-top: 4px; line-height: 1.5; }
-
-        .backlog { color: var(--recent); }
-
-        .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-bottom: 16px; }
-
-        .square { width: 10px; height: 10px; display: inline-block; flex: none; opacity: 0.6; }
-
-        .legend label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-
         .legend span { display: flex; align-items: center; gap: 6px; }
-
-        .empty { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
-
-        .report { margin-bottom: 18px; }
-
-        .report-controls { display: flex; gap: 8px; margin-bottom: 10px; }
-
-        .report-controls select, .report-controls button {
-            padding: 8px 10px;
-            border-radius: 6px;
+        .square { display: inline-block; width: 10px; height: 10px; flex: none; opacity: 0.8; }
+        .sighting-dot { border-radius: 1px !important; transform: rotate(45deg); }
+        .alert-key { width: 12px; height: 12px; flex: none; border: 2px dashed var(--review); border-radius: 50%; }
+        .sighting-marker { border: 0; background: transparent; }
+        .sighting-marker span {
+            display: block;
+            width: 11px;
+            height: 11px;
+            border: 2px solid var(--bg);
+            background: var(--marker-color, var(--fresh));
+            box-shadow: 0 0 0 1px var(--marker-color, var(--fresh));
+            transform: rotate(45deg);
+        }
+        h2 {
+            margin: 18px 0 8px;
+            color: var(--muted);
             font-size: 13px;
-            border: 1px solid var(--border);
+            font-weight: 600;
+            letter-spacing: 0.06em;
         }
 
-        .report-controls select { flex: 1; background: var(--card); color: var(--text); }
-
-        .report-controls button { background: var(--text); color: var(--bg); font-weight: 600; cursor: pointer; border: none; }
-
-        .report-controls button:disabled { opacity: 0.5; cursor: wait; }
-
-        .report-text {
-            white-space: pre-wrap;
-            font-size: 13px;
-            line-height: 1.55;
+        .unit, .hit {
+            display: block;
+            width: 100%;
+            margin-bottom: 8px;
+            padding: 12px 14px;
             border: 1px solid var(--border);
-            background: var(--card);
+            border-radius: 10px;
+            background: var(--surface);
+            color: var(--text);
+            text-align: left;
+            font: inherit;
+            font-size: 14px;
+            cursor: pointer;
+            transition: border-color 120ms ease, background-color 120ms ease;
+        }
+
+        .unit:hover, .hit:hover { border-color: var(--accent); background: var(--raised); }
+        .unit:focus-visible, .hit:focus-visible, button:focus-visible, select:focus-visible,
+        input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+        .unit-name { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+        .dot { display: inline-block; width: 10px; height: 10px; flex: none; border-radius: 50%; }
+        .meta { color: var(--muted); margin-top: 5px; line-height: 1.45; }
+        .backlog { color: var(--review); font-weight: 600; }
+        .needs-attention { color: var(--error); }
+        .empty { margin-bottom: 16px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+
+        .report { margin-bottom: 18px; }
+        .report-controls { display: flex; gap: 8px; margin-bottom: 10px; }
+        .report-controls select, .report-controls button {
+            min-height: 44px;
+            padding: 9px 12px;
+            border: 1px solid var(--border);
             border-radius: 8px;
+            font: inherit;
+            font-size: 14px;
+        }
+
+        .report-controls select { flex: 1; background: var(--surface); color: var(--text); }
+        .report-controls button {
+            border-color: var(--accent);
+            background: var(--accent);
+            color: #0B1215;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .report-controls button:disabled { opacity: 0.6; cursor: wait; }
+        [data-theme="day"] .report-controls button { color: #FFFFFF; }
+        .report-controls button:hover { filter: brightness(1.08); }
+        .report-text {
             padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface);
+            font-size: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
         }
 
         #login {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.75);
+            z-index: 2000;
             display: none;
             align-items: center;
             justify-content: center;
-            z-index: 2000;
             padding: 16px;
+            background: rgba(0, 0, 0, 0.75);
         }
 
         #login form {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 24px;
             width: 100%;
             max-width: 360px;
+            padding: 24px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface);
         }
 
-        #login p { font-size: 13px; color: var(--muted); margin: 8px 0 16px; }
-
+        #login p { margin: 8px 0 16px; color: var(--muted); font-size: 14px; line-height: 1.5; }
         #login input, #login button {
             width: 100%;
+            min-height: 48px;
             padding: 10px 12px;
-            border-radius: 6px;
-            font-size: 14px;
+            border-radius: 8px;
+            font: inherit;
         }
 
-        #login input { border: 1px solid var(--border); background: var(--card); color: var(--text); margin-bottom: 10px; }
+        #login input {
+            margin-bottom: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+        }
+        #login button { border: none; background: var(--accent); color: #0B1215; font-weight: 700; }
+        [data-theme="day"] #login button { color: #FFFFFF; }
 
-        #login button { border: none; background: var(--text); color: var(--bg); font-weight: 600; cursor: pointer; }
+        @media (max-width: 1000px) {
+            .overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            aside { width: 350px; }
+        }
 
         @media (max-width: 760px) {
-            main { flex-direction: column; }
-            #map-wrap { flex: none; height: 55vh; }
-            aside { width: 100%; border-left: none; border-top: 1px solid var(--border); }
+            body { height: auto; min-height: 100vh; }
             header { padding: 12px 16px; }
+            .header-meta { align-items: flex-end; flex-direction: column; gap: 4px; }
+            .overview { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 16px; }
+            main { min-height: 0; }
+            #map-wrap { height: 48vh; min-height: 300px; }
+            aside { width: 100%; max-height: none; padding: 16px; border-top-color: var(--border); }
+        }
+
+        @media (max-width: 420px) {
+            .overview { grid-template-columns: 1fr 1fr; }
+            .overview-card { padding: 9px 10px; }
+            .overview-value { font-size: 20px; }
+            .summary { max-width: 24ch; text-align: right; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
         }
     </style>
 </head>
 <body>
     <header>
-        <h1>NeuSE Command Center</h1>
-        <div class="summary" id="summary">Connecting...</div>
+        <div>
+            <h1>NeuSE <span>Command Center</span></h1>
+            <p class="brand-subtitle">Search coordination · sightings are not a headcount</p>
+        </div>
+        <div class="header-meta">
+            <div class="live-status" id="live-status" data-state="loading" role="status" aria-live="polite">Connecting...</div>
+            <div class="summary" id="summary">Waiting for the server</div>
+        </div>
     </header>
+
+    <section class="overview" aria-label="Current operation summary">
+        <div class="overview-card"><span class="overview-label">Units online</span><strong class="overview-value" id="online-count">—</strong></div>
+        <div class="overview-card"><span class="overview-label">Sightings logged</span><strong class="overview-value" id="sighting-count">—</strong></div>
+        <div class="overview-card"><span class="overview-label">Waiting on units</span><strong class="overview-value" id="queued-count">—</strong></div>
+        <div class="overview-card"><span class="overview-label">Refused sightings</span><strong class="overview-value" id="refused-count">—</strong></div>
+        <div class="overview-card"><span class="overview-label">Alerts · last 24h</span><strong class="overview-value" id="alert-count">—</strong></div>
+    </section>
 
     <main>
         <div id="map-wrap">
@@ -198,9 +356,10 @@
             <div class="legend">
                 <span><i class="dot" style="background: var(--online)"></i>Unit online</span>
                 <span><i class="dot" style="background: var(--offline)"></i>Unit offline</span>
-                <span><i class="dot" style="background: var(--fresh)"></i>Sighting, last 5 min</span>
-                <span><i class="dot" style="background: var(--recent)"></i>Last hour</span>
-                <span><i class="dot" style="background: var(--old)"></i>Older</span>
+                <span><i class="dot sighting-dot" style="background: var(--fresh)"></i>Sighting, last 5 min</span>
+                <span><i class="dot sighting-dot" style="background: var(--recent)"></i>Last hour</span>
+                <span><i class="dot sighting-dot" style="background: var(--old)"></i>Older</span>
+                <span><i class="alert-key"></i>Cluster alert</span>
                 <label><input type="checkbox" id="show-searched" checked>
                     <i class="square" style="background: var(--searched)"></i>Searched in the last 24 hours</label>
             </div>
@@ -353,9 +512,18 @@
                 }
                 meta.append(el('div', '', unit.detections + ' sightings' + (unit.detector ? ' with ' + unit.detector : '')));
                 if (unit.queued) meta.append(el('div', 'backlog', unit.queued + ' sightings waiting on the unit'));
-                if (unit.refused) meta.append(el('div', 'backlog', unit.refused + ' sightings refused, check this unit'));
+                if (unit.refused) meta.append(el('div', 'backlog needs-attention', unit.refused + ' sightings refused, check this unit'));
                 card.append(name, meta);
-                card.addEventListener('click', () => lookAt(unit.latitude, unit.longitude, 17));
+                card.setAttribute('role', 'button');
+                card.tabIndex = 0;
+                const focusUnit = () => lookAt(unit.latitude, unit.longitude, 17);
+                card.addEventListener('click', focusUnit);
+                card.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        focusUnit();
+                    }
+                });
                 list.append(card);
                 if (!map) continue;
 
@@ -383,7 +551,14 @@
                 if (!map) break;
                 let marker = hitMarkers.get(hit.uid);
                 if (!marker) {
-                    marker = L.circleMarker([hit.latitude, hit.longitude], { radius: 5, weight: 1, fillOpacity: 0.8 }).addTo(map);
+                    marker = L.marker([hit.latitude, hit.longitude], {
+                        icon: L.divIcon({
+                            className: 'sighting-marker',
+                            html: '<span aria-hidden="true"></span>',
+                            iconSize: [13, 13],
+                            iconAnchor: [6, 6]
+                        })
+                    }).addTo(map);
                     // the time shown is corrected on the server when the unit's clock was wrong
                     const label = hit.unit_id + ', ' + new Date(hit.timestamp_utc).toLocaleString() +
                         (hit.confidence !== null ? ', confidence ' + hit.confidence.toFixed(2) : '') + ', ' + placed(hit);
@@ -391,7 +566,7 @@
                     hitMarkers.set(hit.uid, marker);
                 }
                 // colours age as time passes, even with no new data
-                marker.setStyle({ color: ageColour(hit.timestamp_utc), fillColor: ageColour(hit.timestamp_utc) });
+                marker.getElement().style.setProperty('--marker-color', ageColour(hit.timestamp_utc));
             }
 
             const list = document.getElementById('hits');
@@ -404,7 +579,16 @@
                     (hit.confidence !== null ? ', confidence ' + hit.confidence.toFixed(2) : '') +
                     ', ' + hit.latitude.toFixed(5) + ', ' + hit.longitude.toFixed(5)));
                 card.append(el('div', 'meta', placed(hit)));
-                card.addEventListener('click', () => lookAt(hit.latitude, hit.longitude, 18));
+                card.setAttribute('role', 'button');
+                card.tabIndex = 0;
+                const focusHit = () => lookAt(hit.latitude, hit.longitude, 18);
+                card.addEventListener('click', focusHit);
+                card.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        focusHit();
+                    }
+                });
                 list.append(card);
             }
         }
@@ -446,6 +630,7 @@
 
         async function drawAlerts() {
             const data = await api('/api/v1/alerts?hours=24');
+            document.getElementById('alert-count').textContent = data.alerts.length;
             const list = document.getElementById('alerts');
             list.replaceChildren();
             if (!data.alerts.length) list.append(el('div', 'empty', 'No alerts in the last 24 hours.'));
@@ -455,9 +640,18 @@
                 card.append(el('div', 'unit-name', alert.sightings + ' strong sightings near ' +
                     alert.latitude.toFixed(5) + ', ' + alert.longitude.toFixed(5)));
                 card.append(el('div', 'meta', ago(alert.created_at) + ', by ' + alert.units.join(', ')));
-                if (alert.sent_via && !alert.delivered) card.append(el('div', 'backlog', 'Text not delivered, ' + alert.error));
+                if (alert.sent_via && !alert.delivered) card.append(el('div', 'backlog needs-attention', 'Text not delivered, ' + alert.error));
                 else if (alert.delivered) card.append(el('div', 'meta', 'Text sent'));
-                card.addEventListener('click', () => lookAt(alert.latitude, alert.longitude, 18));
+                card.setAttribute('role', 'button');
+                card.tabIndex = 0;
+                const focusAlert = () => lookAt(alert.latitude, alert.longitude, 18);
+                card.addEventListener('click', focusAlert);
+                card.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        focusAlert();
+                    }
+                });
                 list.append(card);
             }
             if (data.alerts.length > 5) list.append(el('div', 'empty', (data.alerts.length - 5) + ' earlier alerts are marked on the map.'));
@@ -470,7 +664,7 @@
                     alertMarkers.set(alert.id, ring);
                 }
                 // colours age as time passes, the same as sightings
-                ring.setStyle({ color: ageColour(alert.created_at) });
+                ring.setStyle({ color: getComputedStyle(document.documentElement).getPropertyValue('--review').trim() });
             }
             document.getElementById('alerts-note').textContent = textNote(data);
         }
@@ -502,12 +696,34 @@
                 fitOnce();
                 // searched ground is extra, so a failure there leaves the rest of the page working
                 try { await drawSearched(); } catch (e) { lastSearched = 0; }
-                try { await drawAlerts(); } catch (e) {}
+                try {
+                    await drawAlerts();
+                } catch (e) {
+                    document.getElementById('alert-count').textContent = '—';
+                    document.getElementById('alerts-note').textContent = 'Alerts are currently unavailable.';
+                }
                 const online = unitData.units.filter(u => u.online).length;
+                const queued = unitData.units.reduce((sum, unit) => sum + (unit.queued || 0), 0);
+                const refused = unitData.units.reduce((sum, unit) => sum + (unit.refused || 0), 0);
+                document.getElementById('online-count').textContent = online + ' / ' + unitData.units.length;
+                document.getElementById('sighting-count').textContent = unitData.detections;
+                document.getElementById('queued-count').textContent = queued;
+                document.getElementById('refused-count').textContent = refused;
                 document.getElementById('summary').textContent =
-                    online + ' of ' + unitData.units.length + ' units online, ' + unitData.detections + ' sightings';
+                    online + ' of ' + unitData.units.length + ' units online, ' + unitData.detections +
+                    ' sightings · Updated ' + new Date().toLocaleTimeString();
+                const liveStatus = document.getElementById('live-status');
+                if (liveStatus.dataset.state !== 'ready') {
+                    liveStatus.textContent = 'Command center connected';
+                    liveStatus.dataset.state = 'ready';
+                }
             } catch (e) {
-                document.getElementById('summary').textContent = 'Waiting for the server';
+                document.getElementById('summary').textContent = 'Data may be stale';
+                const liveStatus = document.getElementById('live-status');
+                if (liveStatus.dataset.state !== 'error') {
+                    liveStatus.textContent = 'Command center unavailable';
+                    liveStatus.dataset.state = 'error';
+                }
             }
         }
 
