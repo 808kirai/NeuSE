@@ -1,7 +1,10 @@
 import gzip
 import json
+import os
 import socket
 import sqlite3
+import subprocess
+import sys
 import threading
 
 import cv2
@@ -142,6 +145,17 @@ def test_a_command_center_that_takes_nothing_does_not_loop(isolated_db):
     assert result["synced"] == 0 and result["pending"] == 2 and result["error"]
 
 
+def test_duplicate_acknowledgements_count_each_detection_once(isolated_db):
+    log_hits(2)
+
+    def repeated(detections):
+        uid = detections[0]["uid"]
+        return {"accepted": [uid, uid, "unknown", [uid]], "rejected": {uid: "bad box"}}
+
+    assert sync.sync_once(repeated) == {"synced": 2, "refused": 0, "pending": 0, "error": None}
+    assert all(r["synced_at"] and r["sync_error"] is None for r in rows(isolated_db))
+
+
 def test_refused_detections_are_held_counted_and_not_resent(isolated_db):
     log_hits(2)
     calls = []
@@ -213,6 +227,38 @@ def test_retry_wait_never_overflows_however_long_the_outage():
     assert sync.retry_wait(1, 5.0, 300.0, 1.0) == 10.0
 
 
+@pytest.mark.parametrize("channel", ["status", "coverage", "coverage_reply"])
+def test_auxiliary_failures_back_off_and_recover_without_detections(isolated_db, channel):
+    data_logger()
+    waits = []
+    outcomes = iter([False, False, True, False])
+
+    def flaky(payload):
+        if not next(outcomes):
+            if channel == "coverage_reply":
+                return {"saved": 0}
+            raise sync.send_error("no link")
+        return {"saved": len(payload)}
+
+    def queue_coverage():
+        with sqlite3.connect(isolated_db) as conn:
+            conn.execute("insert or replace into coverage (cell_row, cell_col, last_seen, frames, synced) "
+                         "values (1, 2, '2026-11-14T10:00:00+00:00', 1, 0)")
+
+    def sleep(seconds):
+        waits.append(seconds)
+        if channel != "status":
+            assert bool(sync.pending_coverage()) == (len(waits) != 3)
+            queue_coverage()
+
+    if channel != "status":
+        queue_coverage()
+    kwargs = {"send_status" if channel == "status" else "send_coverage": flaky}
+    sync.run(offline, interval=5, max_wait=15, stop=lambda: len(waits) >= 4,
+             sleep=sleep, jitter=lambda: 1.0, **kwargs)
+    assert waits == [10, 15, 5, 10]
+
+
 def test_sync_keeps_going_through_a_very_long_outage(isolated_db, monkeypatch):
     log_hits(1)
     # skip the database work so two thousand rounds run in a moment
@@ -260,6 +306,42 @@ def test_old_confirmed_detections_can_be_pruned(isolated_db, center):
     assert prune(30) == 2
     # the waiting one and the refused one are never removed
     assert sync.pending_count() == 1 and sync.refused_count() == 1
+
+
+@pytest.mark.parametrize("mode", ["success", "detections", "status", "coverage", "refused", "held"])
+@pytest.mark.parametrize("flag", ["--once", "--retry-refused"])
+def test_one_shot_reports_failures(isolated_db, monkeypatch, capsys, mode, flag):
+    log_hits(1)
+    if mode == "held":
+        sync.sync_once(lambda detections: {"rejected": {d["uid"]: "bad box" for d in detections}})
+
+    def send(detections):
+        if mode == "detections":
+            raise sync.send_error("no link")
+        if mode in ("refused", "held"):
+            return {"rejected": {d["uid"]: "bad box" for d in detections}}
+        return {"accepted": [d["uid"] for d in detections]}
+
+    monkeypatch.setattr(sys, "argv", ["sync", "--url", "http://localhost:8000", flag])
+    monkeypatch.setattr(sync, "http_sender", lambda *args: send)
+    monkeypatch.setattr(sync, "http_status_sender", lambda *args: offline if mode == "status" else lambda note: {})
+    monkeypatch.setattr(sync, "http_coverage_sender", lambda *args: lambda cells: {})
+    monkeypatch.setattr(sync, "sync_coverage", lambda sender: None if mode == "coverage" else 0)
+
+    assert sync.main() == (0 if mode == "success" else 1)
+    output = capsys.readouterr().out
+    if mode in ("status", "coverage"):
+        assert f"{mode} sync failed" in output
+    if mode == "detections":
+        assert "no link" in output and "still queued 1" in output
+
+
+def test_one_shot_process_exits_nonzero_when_offline(isolated_db):
+    result = subprocess.run(
+        [sys.executable, "-m", "src.sync", "--once", "--url", f"http://127.0.0.1:{free_port()}"],
+        env={**os.environ, "NEUSE_DB": str(isolated_db)}, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 1
+    assert "status sync failed" in result.stdout
 
 
 # command center

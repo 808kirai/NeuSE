@@ -18,6 +18,7 @@ import json
 import logging
 import random
 import sqlite3
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -236,7 +237,7 @@ def sync_once(send, batch=None):
         # only trust ids that were in this batch
         sent = {row["uid"] for row in rows}
         accepted = reply.get("accepted")
-        accepted = [uid for uid in accepted if isinstance(uid, str) and uid in sent] if isinstance(accepted, list) else []
+        accepted = {uid for uid in accepted if isinstance(uid, str) and uid in sent} if isinstance(accepted, list) else set()
         rejected = reply.get("rejected")
         rejected = {uid: str(why) for uid, why in rejected.items()
                     if uid in sent and uid not in accepted} if isinstance(rejected, dict) else {}
@@ -260,28 +261,30 @@ def run(send, interval=None, max_wait=None, stop=lambda: False, sleep=time.sleep
     # keeps syncing until stop() is true
     # send_status, when given, also posts the unit's status note each round
     # send_coverage, when given, also posts the ground squares the camera has covered
-    # after a failure the wait doubles up to max_wait, and goes back to interval once a sync works
+    # any failed channel backs off, even when there are no detections waiting
+    # the wait goes back to interval once all channels work again
     interval = interval or config.sync_interval
     max_wait = max_wait or config.sync_max_wait
     failures = 0
     last_prune = float("-inf")
     while not stop():
         result = sync_once(send)
+        error = result["error"]
         if send_status is not None:
             try:
                 send_status(status_note())
-            except send_error:
-                # the detections are what matter, a missed status note is simply sent next round
-                pass
+            except send_error as err:
+                error = error or f"status sync failed, {err}"
         if send_coverage is not None and not result["error"]:
-            sync_coverage(send_coverage)
+            if sync_coverage(send_coverage) is None:
+                error = error or "coverage sync failed"
         if result["refused"]:
             log.warning("the command center refused %s detections, %s are now held on this unit, "
                         "fix the cause then run python -m src.sync --retry-refused", result["refused"], refused_count())
-        if result["error"]:
+        if error:
             failures += 1
             wait = retry_wait(failures, interval, max_wait, jitter())
-            log.warning("sync failed, %s queued, trying again in %.0f s, %s", result["pending"], wait, result["error"])
+            log.warning("sync failed, %s queued, trying again in %.0f s, %s", result["pending"], wait, error)
         else:
             failures = 0
             wait = interval
@@ -326,18 +329,21 @@ def main():
 
     if args.once or args.retry_refused:
         result = sync_once(send)
+        errors = [result["error"]] if result["error"] else []
         try:
             send_status(status_note())
-        except send_error:
-            pass
+        except send_error as err:
+            errors.append(f"status sync failed, {err}")
         if not result["error"]:
-            sync_coverage(send_coverage)
+            if sync_coverage(send_coverage) is None:
+                errors.append("coverage sync failed")
         print(f"sent {result['synced']}, refused {result['refused']}, still queued {result['pending']}" +
-              (f", {result['error']}" if result["error"] else ""))
-        return
+              (f", {'; '.join(errors)}" if errors else ""))
+        # scheduled jobs must distinguish delivery failures and held rows from success
+        return 1 if errors or result["pending"] or refused_count() else 0
     log.info("unit %s syncing to %s", config.unit_id, args.url)
     run(send, interval=args.interval, send_status=send_status, send_coverage=send_coverage)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
