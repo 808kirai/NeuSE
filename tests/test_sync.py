@@ -1,7 +1,10 @@
 import gzip
 import json
+import os
 import socket
 import sqlite3
+import subprocess
+import sys
 import threading
 
 import cv2
@@ -303,6 +306,42 @@ def test_old_confirmed_detections_can_be_pruned(isolated_db, center):
     assert prune(30) == 2
     # the waiting one and the refused one are never removed
     assert sync.pending_count() == 1 and sync.refused_count() == 1
+
+
+@pytest.mark.parametrize("mode", ["success", "detections", "status", "coverage", "refused", "held"])
+@pytest.mark.parametrize("flag", ["--once", "--retry-refused"])
+def test_one_shot_reports_failures(isolated_db, monkeypatch, capsys, mode, flag):
+    log_hits(1)
+    if mode == "held":
+        sync.sync_once(lambda detections: {"rejected": {d["uid"]: "bad box" for d in detections}})
+
+    def send(detections):
+        if mode == "detections":
+            raise sync.send_error("no link")
+        if mode in ("refused", "held"):
+            return {"rejected": {d["uid"]: "bad box" for d in detections}}
+        return {"accepted": [d["uid"] for d in detections]}
+
+    monkeypatch.setattr(sys, "argv", ["sync", "--url", "http://localhost:8000", flag])
+    monkeypatch.setattr(sync, "http_sender", lambda *args: send)
+    monkeypatch.setattr(sync, "http_status_sender", lambda *args: offline if mode == "status" else lambda note: {})
+    monkeypatch.setattr(sync, "http_coverage_sender", lambda *args: lambda cells: {})
+    monkeypatch.setattr(sync, "sync_coverage", lambda sender: None if mode == "coverage" else 0)
+
+    assert sync.main() == (0 if mode == "success" else 1)
+    output = capsys.readouterr().out
+    if mode in ("status", "coverage"):
+        assert f"{mode} sync failed" in output
+    if mode == "detections":
+        assert "no link" in output and "still queued 1" in output
+
+
+def test_one_shot_process_exits_nonzero_when_offline(isolated_db):
+    result = subprocess.run(
+        [sys.executable, "-m", "src.sync", "--once", "--url", f"http://127.0.0.1:{free_port()}"],
+        env={**os.environ, "NEUSE_DB": str(isolated_db)}, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 1
+    assert "status sync failed" in result.stdout
 
 
 # command center

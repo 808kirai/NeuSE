@@ -18,6 +18,7 @@ import json
 import logging
 import random
 import sqlite3
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -328,18 +329,21 @@ def main():
 
     if args.once or args.retry_refused:
         result = sync_once(send)
+        errors = [result["error"]] if result["error"] else []
         try:
             send_status(status_note())
-        except send_error:
-            pass
+        except send_error as err:
+            errors.append(f"status sync failed, {err}")
         if not result["error"]:
-            sync_coverage(send_coverage)
+            if sync_coverage(send_coverage) is None:
+                errors.append("coverage sync failed")
         print(f"sent {result['synced']}, refused {result['refused']}, still queued {result['pending']}" +
-              (f", {result['error']}" if result["error"] else ""))
-        return
+              (f", {'; '.join(errors)}" if errors else ""))
+        # scheduled jobs must distinguish delivery failures and held rows from success
+        return 1 if errors or result["pending"] or refused_count() else 0
     log.info("unit %s syncing to %s", config.unit_id, args.url)
     run(send, interval=args.interval, send_status=send_status, send_coverage=send_coverage)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
