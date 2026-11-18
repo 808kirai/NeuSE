@@ -142,6 +142,17 @@ def test_a_command_center_that_takes_nothing_does_not_loop(isolated_db):
     assert result["synced"] == 0 and result["pending"] == 2 and result["error"]
 
 
+def test_duplicate_acknowledgements_count_each_detection_once(isolated_db):
+    log_hits(2)
+
+    def repeated(detections):
+        uid = detections[0]["uid"]
+        return {"accepted": [uid, uid, "unknown", [uid]], "rejected": {uid: "bad box"}}
+
+    assert sync.sync_once(repeated) == {"synced": 2, "refused": 0, "pending": 0, "error": None}
+    assert all(r["synced_at"] and r["sync_error"] is None for r in rows(isolated_db))
+
+
 def test_refused_detections_are_held_counted_and_not_resent(isolated_db):
     log_hits(2)
     calls = []
@@ -211,6 +222,38 @@ def test_retry_wait_never_overflows_however_long_the_outage():
     for failures in (1, 16, 1024, 5000, 10 ** 6):
         assert 0 < sync.retry_wait(failures, 5.0, 300.0, 1.0) <= 300.0
     assert sync.retry_wait(1, 5.0, 300.0, 1.0) == 10.0
+
+
+@pytest.mark.parametrize("channel", ["status", "coverage", "coverage_reply"])
+def test_auxiliary_failures_back_off_and_recover_without_detections(isolated_db, channel):
+    data_logger()
+    waits = []
+    outcomes = iter([False, False, True, False])
+
+    def flaky(payload):
+        if not next(outcomes):
+            if channel == "coverage_reply":
+                return {"saved": 0}
+            raise sync.send_error("no link")
+        return {"saved": len(payload)}
+
+    def queue_coverage():
+        with sqlite3.connect(isolated_db) as conn:
+            conn.execute("insert or replace into coverage (cell_row, cell_col, last_seen, frames, synced) "
+                         "values (1, 2, '2026-11-14T10:00:00+00:00', 1, 0)")
+
+    def sleep(seconds):
+        waits.append(seconds)
+        if channel != "status":
+            assert bool(sync.pending_coverage()) == (len(waits) != 3)
+            queue_coverage()
+
+    if channel != "status":
+        queue_coverage()
+    kwargs = {"send_status" if channel == "status" else "send_coverage": flaky}
+    sync.run(offline, interval=5, max_wait=15, stop=lambda: len(waits) >= 4,
+             sleep=sleep, jitter=lambda: 1.0, **kwargs)
+    assert waits == [10, 15, 5, 10]
 
 
 def test_sync_keeps_going_through_a_very_long_outage(isolated_db, monkeypatch):

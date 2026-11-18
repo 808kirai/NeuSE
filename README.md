@@ -114,6 +114,7 @@ Every detection gets a unique id and the name of its unit when it is logged. It 
 - `python -m src.sync` checks every 5 seconds and sends waiting detections in batches of 100, newest first, so coordinators see the current picture as soon as a link returns
 - Batches are compressed, since field links can be slow and paid by the megabyte
 - When the command center cannot be reached, the unit keeps detecting and waits longer between tries, doubling up to 5 minutes with a little randomness so many units do not retry at once
+- Status and coverage sync failures also trigger this retry wait, even with no detections queued. The normal interval resumes once all enabled sync channels succeed
 - If a reply gets lost, sending the batch again is safe. The command center keeps each id once
 - The command center checks every detection. One it refuses is held on the unit with the reason and left out of the queue, so a bad row cannot block the rest. It is not marked as sent. The unit logs a warning, counts it on its dashboard and reports the count to the command center. Once the cause is fixed, `python -m src.sync --retry-refused` puts held detections back in the queue
 - A unit will not start with a name the command center would refuse, since every one of its detections would then be turned away
