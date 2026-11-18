@@ -5,162 +5,214 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NeuSE · Edge Telemetry Console</title>
     <style>
-        /* colours used across the page */
-        :root {
-            --bg: #1B191A;
-            --text: #FEFEFE;
-            --muted: rgba(254, 254, 254, 0.55);
-            --border: rgba(254, 254, 254, 0.12);
-            --card: rgba(254, 254, 254, 0.03);
-            --card-hover: rgba(254, 254, 254, 0.06);
-        }
-
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
         }
 
-        html {
-            scroll-behavior: smooth;
+        :root {
+            color-scheme: dark;
+            --bg: #0B1215;
+            --surface: #121D21;
+            --raised: #1B292E;
+            --text: #F3F7F6;
+            --muted: #B7C4C6;
+            --border: #687A80;
+            --accent: #57D9CC;
+            --candidate: #63DCE8;
+            --review: #FFD07A;
+            --error: #FF8181;
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 12px;
+            --space-4: 16px;
+            --space-6: 24px;
+            --space-8: 32px;
+            --radius: 12px;
+            --field-target: 56px;
+        }
+
+        [data-theme="day"] {
+            color-scheme: light;
+            --bg: #F2F5F3;
+            --surface: #FFFFFF;
+            --raised: #E6ECE9;
+            --text: #142126;
+            --muted: #4C5F63;
+            --border: #6D7B7F;
+            --accent: #006F69;
+            --candidate: #006C84;
+            --review: #7A4900;
+            --error: #A12226;
         }
 
         body {
-            background-color: var(--bg);
+            background: var(--bg);
             color: var(--text);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            min-height: 100vh;
-            padding: 48px 24px;
+            padding: 24px;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.45;
             -webkit-font-smoothing: antialiased;
         }
 
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-        }
+        .container { max-width: 1440px; margin: 0 auto; }
 
-        /* style the header */
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding-bottom: 24px;
+            padding: 8px 0 20px;
+            margin-bottom: 24px;
             border-bottom: 1px solid var(--border);
-            margin-bottom: 32px;
+            gap: 16px;
         }
 
-        .brand-title {
-            font-size: 20px;
-            font-weight: 600;
-            letter-spacing: -0.02em;
-        }
+        .brand-title { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+        .brand-sub { font-size: 15px; color: var(--muted); margin-top: 4px; }
 
-        .brand-sub {
-            font-size: 13px;
-            color: var(--muted);
-            margin-top: 2px;
-        }
+        .header-tools { display: flex; align-items: center; gap: 12px; }
 
         .status-pill {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 6px 14px;
-            border-radius: 999px;
+            min-height: 44px;
+            padding: 8px 14px;
             border: 1px solid var(--border);
-            background: var(--card);
-            font-size: 13px;
-            font-weight: 500;
+            border-radius: 999px;
+            background: var(--surface);
+            color: var(--text);
+            font-size: 14px;
         }
 
-        .dot {
-            width: 7px;
-            height: 7px;
+        .status-pill::before {
+            content: "";
+            width: 9px;
+            height: 9px;
             border-radius: 50%;
-            background-color: var(--text);
-            box-shadow: 0 0 8px rgba(254, 254, 254, 0.8);
+            background: var(--candidate);
         }
 
-        /* lay out the metrics */
+        .status-pill[data-state="error"]::before { background: var(--error); }
+
+        .theme-toggle {
+            min-height: 44px;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            background: var(--surface);
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .theme-toggle:hover, .theme-toggle:focus-visible { border-color: var(--accent); }
+        :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+        .connection-note {
+            margin: -8px 0 20px;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--candidate);
+            border-radius: 8px;
+            background: var(--surface);
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .section-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 12px;
+            margin: 0 0 12px;
+        }
+
+        .section-heading h2 { font-size: 18px; letter-spacing: -0.01em; }
+        .section-heading p { color: var(--muted); font-size: 14px; }
+
         .metrics-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-            margin-bottom: 32px;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+            gap: 12px;
+            margin-bottom: 28px;
         }
 
         .metric-card {
-            background: var(--card);
+            min-height: 116px;
+            background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 20px;
-            transition: background 0.2s ease, border-color 0.2s ease;
-        }
-
-        .metric-card:hover {
-            background: var(--card-hover);
-            border-color: rgba(254, 254, 254, 0.25);
+            border-radius: var(--radius);
+            padding: 18px 20px;
         }
 
         .metric-label {
-            font-size: 12px;
             color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
+            font-size: 14px;
+            letter-spacing: 0.02em;
+            text-transform: none;
             margin-bottom: 8px;
         }
 
         .metric-value {
-            font-size: 26px;
-            font-weight: 600;
-            letter-spacing: -0.02em;
+            font-size: 28px;
+            line-height: 1.2;
+            font-variant-numeric: tabular-nums lining-nums;
+            overflow-wrap: anywhere;
         }
 
-        /* style the telemetry table */
+        .metric-hint {
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
         .table-wrapper {
-            background: var(--card);
+            background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            overflow: hidden;
+            border-radius: var(--radius);
+            overflow-x: auto;
         }
 
         table {
             width: 100%;
+            min-width: 680px;
             border-collapse: collapse;
             text-align: left;
-            font-size: 14px;
+            font-size: 15px;
         }
 
         th {
-            background: rgba(254, 254, 254, 0.02);
             padding: 14px 18px;
-            font-weight: 500;
+            background: var(--raised);
             color: var(--muted);
-            border-bottom: 1px solid var(--border);
-            font-size: 12px;
+            font-size: 13px;
             letter-spacing: 0.04em;
-            text-transform: uppercase;
+            border-bottom: 1px solid var(--border);
         }
 
         td {
-            padding: 14px 18px;
+            padding: 16px 18px;
             border-bottom: 1px solid var(--border);
             color: var(--text);
-            font-variant-numeric: tabular-nums;
+            font-variant-numeric: tabular-nums lining-nums;
         }
 
-        tr:last-child td {
-            border-bottom: none;
-        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: var(--raised); }
+        .empty-row { padding: 28px; color: var(--muted); }
 
-        tr:hover td {
-            background: var(--card-hover);
-        }
-
-        .empty-row {
-            text-align: center;
-            color: var(--muted);
-            padding: 32px;
+        @media (max-width: 640px) {
+            body { padding: 16px; }
+            header { align-items: flex-start; }
+            .header-tools { align-items: flex-end; flex-direction: column; }
+            .brand-title { font-size: 22px; }
+            .brand-sub { max-width: 28ch; }
+            .metric-card { min-height: 104px; padding: 16px; }
+            .metric-value { font-size: 25px; }
+            .section-heading { align-items: flex-start; flex-direction: column; gap: 2px; }
         }
     </style>
 </head>
@@ -171,12 +223,24 @@
                 <div class="brand-title">NeuSE</div>
                 <div class="brand-sub">Neural Sentinel Edge · Search &amp; Rescue Telemetry</div>
             </div>
-            <div class="status-pill">
-                <span id="system-status">Connecting...</span>
+            <div class="header-tools">
+                <div class="status-pill" id="system-status" data-state="loading" role="status" aria-live="polite">
+                    Connecting to local telemetry...
+                </div>
+                <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Switch to day theme</button>
             </div>
         </header>
 
-        <div class="metrics-grid">
+        <p class="connection-note">
+            This page reads the field unit's local telemetry. It does not indicate whether the command center link is connected.
+        </p>
+
+        <section aria-labelledby="telemetry-heading">
+            <div class="section-heading">
+                <h2 id="telemetry-heading">Unit telemetry</h2>
+                <p>Refreshes automatically every 2 seconds</p>
+            </div>
+            <div class="metrics-grid">
             <div class="metric-card">
                 <div class="metric-label">Detector</div>
                 <div class="metric-value" id="detector-name">—</div>
@@ -184,21 +248,31 @@
             <div class="metric-card">
                 <div class="metric-label">Avg. Processing Time</div>
                 <div class="metric-value" id="avg-latency">—</div>
+                <div class="metric-hint">Across recent frames</div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">Total Detections</div>
                 <div class="metric-value" id="detection-count">0</div>
+                <div class="metric-hint">Sightings logged on this unit</div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">Waiting To Send</div>
                 <div class="metric-value" id="queued-count">0</div>
+                <div class="metric-hint">Stored locally until acknowledged</div>
             </div>
             <div class="metric-card">
-                <div class="metric-label">Refused By Command Center</div>
+                <div class="metric-label">Rejected by Command Center</div>
                 <div class="metric-value" id="refused-count">0</div>
+                <div class="metric-hint">Requires attention before retry</div>
             </div>
-        </div>
+            </div>
+        </section>
 
+        <section aria-labelledby="detections-heading">
+        <div class="section-heading">
+            <h2 id="detections-heading">Recent detections</h2>
+            <p>Coordinates and confidence are estimates, not confirmation.</p>
+        </div>
         <div class="table-wrapper">
             <table>
                 <thead>
@@ -212,11 +286,12 @@
                 </thead>
                 <tbody id="telemetry-body">
                     <tr>
-                        <td colspan="5" class="empty-row">Connecting to the local pipeline...</td>
+                        <td colspan="5" class="empty-row">Waiting for local telemetry...</td>
                     </tr>
                 </tbody>
             </table>
         </div>
+        </section>
     </div>
 
 <script>
@@ -233,7 +308,11 @@
                 document.getElementById('detection-count').textContent = json.total || 0;
                 document.getElementById('queued-count').textContent = json.queued || 0;
                 document.getElementById('refused-count').textContent = json.refused || 0;
-                document.getElementById('system-status').textContent = 'Local node online';
+                const status = document.getElementById('system-status');
+                if (status.dataset.state !== 'ready') {
+                    status.textContent = 'Local telemetry available';
+                    status.dataset.state = 'ready';
+                }
 
                 // clear the old rows before drawing new ones
                 const body = document.getElementById('telemetry-body');
@@ -245,7 +324,7 @@
                     const cell = row.insertCell();
                     cell.colSpan = 5;
                     cell.className = 'empty-row';
-                    cell.textContent = 'No detections logged yet.';
+                    cell.textContent = 'No detections logged yet. This does not mean the area is clear.';
                     return;
                 }
 
@@ -270,11 +349,23 @@
                     }
                 }
             } catch (err) {
-                // the server could not be reached so show the unit as offline
+                // the local telemetry endpoint could not be reached
                 console.error("Dashboard telemetry error:", err);
-                document.getElementById('system-status').innerText = 'Offline / Waiting';
+                const status = document.getElementById('system-status');
+                if (status.dataset.state !== 'error') {
+                    status.textContent = 'Local telemetry unavailable';
+                    status.dataset.state = 'error';
+                }
             }
         }
+
+        const themeToggle = document.getElementById('theme-toggle');
+        themeToggle.addEventListener('click', () => {
+            const isDay = document.documentElement.dataset.theme !== 'day';
+            document.documentElement.dataset.theme = isDay ? 'day' : 'dark';
+            themeToggle.textContent = isDay ? 'Switch to night theme' : 'Switch to day theme';
+            themeToggle.setAttribute('aria-pressed', String(isDay));
+        });
 
         // refresh every two seconds and once rightaway
         setInterval(updateTelemetry, 2000);
