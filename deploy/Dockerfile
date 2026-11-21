@@ -1,7 +1,7 @@
 # the command center as a container, built from the repository root
 #   docker build -f deploy/Dockerfile -t neuse-command-center .
 # it needs NEUSE_CC_TOKEN, and NEUSE_CC_DATABASE_URL for rds for mysql, see docs/DEPLOY.md
-FROM python:3.12.16-slim
+FROM python:3.15.2-slim
 
 WORKDIR /app
 COPY command_center/requirements.txt command_center/requirements-smn.txt /app/command_center/
