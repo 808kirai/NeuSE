@@ -236,3 +236,5 @@ The organising committee's Task Analysis and Technical Enablement session and it
 - Deadlines are set per region, and a late submission counts as withdrawal
 
 Template 1, the technical paper and the handoff notes were updated to match.
+
+The organisers also said judges should be able to deploy entries themselves. `docs/DEPLOY.md` now starts with a ten minute deployment on any computer with Docker, flying demo units against it and checking the scores, with the Huawei Cloud steps as part 2. The Docker image it uses is built and run on every push.
