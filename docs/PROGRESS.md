@@ -223,3 +223,16 @@ Dependabot's first proposals were merged once their tests passed - numpy 2.5.4, 
 
 Decision - Physical attacks that hide people from thermal cameras are not defended against. NeuSE is for finding people who want to be found, and the remaining risk is written down instead of hidden.
 
+2026-11-22 - What the organisers require, from their Q&A
+
+The organising committee's Task Analysis and Technical Enablement session and its Q&A settled what each stage needs.
+
+- At the preliminary stage no deployment, demo link or runnable application is required. A prototype, a technical proposal, notes on how Huawei Cloud is used, images and a video are enough
+- Huawei Cloud vouchers are given only to teams that reach the regional stage, so deployment on ECS and RDS, SMS alerts and MindYOLO training on ModelArts belong to that stage
+- MindSpore and ModelArts are not required, and calling existing AI services is allowed. At least one Huawei Cloud service must be used
+- Huawei hardware is optional and earns no extra points, so the Orange Pi AIpro is a bonus
+- The entry should show what is built and what is planned with a clear line between them, which Template 1 and the paper already do
+- At the regional stage the committee reruns the work from the code, data and README, and a mismatch forfeits advancement
+- Deadlines are set per region, and a late submission counts as withdrawal
+
+Template 1, the technical paper and the handoff notes were updated to match.
