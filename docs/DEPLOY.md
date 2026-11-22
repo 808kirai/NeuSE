@@ -1,6 +1,76 @@
-Deploying the command center on Huawei Cloud
+Deploying NeuSE
 
-This puts the command center on the internet behind HTTPS, so field units anywhere can sync to it and coordinators can open the map. It uses an ECS server for the command center and RDS for MySQL for its database. The steps below have not been run on Huawei Cloud yet, since the team does not have access. The image and the MySQL support are checked automatically on every push.
+There are two ways to deploy it.
+
+- On any computer with Docker, in about ten minutes, to try it or to check the results. See the first part below
+- On Huawei Cloud, with HTTPS and a managed database, so field units anywhere can sync to it. See the second part
+
+The Docker image is built and run, and a sighting sent to it and read back, on every push to the repository, so both ways start from an image that is known to work.
+
+Part 1. On any computer with Docker
+
+This runs the same command center image as the cloud deployment, on your own computer, with field units flown against it from the HIT-UAV test images.
+
+What you need
+
+- Docker, and Git
+- Python 3.12, for the demo units
+- About 1.3 GB of disk for the HIT-UAV dataset
+
+1. Get the code and the data
+
+```bash
+git clone https://github.com/808kirai/NeuSE.git
+cd NeuSE
+pip install -r requirements.txt
+git clone --depth 1 https://github.com/suojiashun/HIT-UAV-Infrared-Thermal-Dataset.git ../datasets/hit-uav
+```
+
+2. Build and start the command center
+
+Make a token first. The command center will not start on a network with a token shorter than 16 characters.
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+docker build -f deploy/Dockerfile -t neuse-command-center .
+docker run -d --name neuse -p 8000:8000 -e NEUSE_CC_TOKEN=PASTE-THE-TOKEN neuse-command-center
+curl http://127.0.0.1:8000/api/v1/health
+```
+
+The last command answers `{"status":"ok"}` when it is running.
+
+3. Open the map
+
+Open http://127.0.0.1:8000 in a browser and enter the token. The map is empty until units report.
+
+4. Fly three units against it
+
+```bash
+python scripts/demo_units.py --frames-dir ../datasets/hit-uav/normal_json/test --units 3 --frames 120 --center http://127.0.0.1:8000 --token PASTE-THE-TOKEN
+```
+
+Units appear on the map within seconds, then their sightings, the ground they have searched and any alerts. Links drop at random and the backlog arrives when they come back. Press Write report for a situation report.
+
+5. Check the detector's scores
+
+```bash
+python scripts/evaluate_hit_uav.py --dataset ../datasets/hit-uav --split test
+python -m pytest -q tests
+```
+
+The first gives mAP@0.5 0.670 on the 579 test images, as reported in the README. The second runs every automated test.
+
+6. Stop it
+
+```bash
+docker rm -f neuse
+```
+
+Without Docker, `NEUSE_CC_TOKEN=PASTE-THE-TOKEN python -m command_center.app` runs the same command center straight from the code, on http://127.0.0.1:8000.
+
+Part 2. On Huawei Cloud
+
+This puts the command center on the internet behind HTTPS, so field units anywhere can sync to it and coordinators can open the map. It uses an ECS server for the command center and RDS for MySQL for its database. Huawei Cloud vouchers are given to teams that reach the competition's regional stage, so these steps will be run then. The image and the MySQL support are checked automatically on every push.
 
 What you need
 

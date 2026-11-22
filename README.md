@@ -205,14 +205,14 @@ Layout
 - `models/` - Trained model files
 - `tests/` - Automated tests
 - `docs/ARCHITECTURE.md` - How the parts fit together
-- `docs/DEPLOY.md` - Step by step deployment on Huawei Cloud
+- `docs/DEPLOY.md` - Step by step deployment, on any computer with Docker in about ten minutes, or on Huawei Cloud
 - `docs/SAFETY.md` - AI safety and security, the threats, measures and remaining risks
 - `SECURITY.md` - How to report a security problem
 - `docs/PROGRESS.md` - Dated record of what was built, measured and decided
 
 Run it
 
-Tested on Python 3.12.
+Tested on Python 3.12. To deploy the command center with Docker and fly demo units against it in about ten minutes, follow part 1 of `docs/DEPLOY.md`.
 
 ```bash
 git clone https://github.com/808kirai/NeuSE.git
