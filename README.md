@@ -8,6 +8,15 @@ Why it matters
 
 After earthquakes and floods, or in remote areas, the network is often the first thing to go. AI tools that depend on the cloud stop working just when rescuers need them most. NeuSE keeps detection on the device, so it works offline, and is designed to share results with the wider team once a link is back.
 
+Recent disasters show the problem
+
+- Türkiye and Syria, February 2023. The earthquakes hit all three Turkish mobile operators and internet traffic in Gaziantep fell by 57%, while rescuers searched rubble for survivors, often with thermal cameras
+- Mai Mahiu, Kenya, April 2024. A flash flood killed about 60 people and left dozens missing in mud and debris, with the main road cut
+- Valencia, Spain, October 2024. Floods killed more than 200 people and cut phone service for up to 200,000, so officials could not even count the missing
+- Nepal and Tibet, August 2026. A Himalayan flash flood down the Lhende River killed more than 1,000 people and left thousands missing, and rescuers searched hydropower tunnels for survivors
+
+In each, people had to be found fast over wide, broken ground just as the networks failed. NeuSE keeps detection working without a network, shows which ground has been searched, and gives coordinators one picture as soon as any link is back.
+
 Where it stands
 
 NeuSE is an early prototype.

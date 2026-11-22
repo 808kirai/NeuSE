@@ -238,3 +238,5 @@ The organising committee's Task Analysis and Technical Enablement session and it
 Template 1, the technical paper and the handoff notes were updated to match.
 
 The organisers also said judges should be able to deploy entries themselves. `docs/DEPLOY.md` now starts with a ten minute deployment on any computer with Docker, flying demo units against it and checking the scores, with the Huawei Cloud steps as part 2. The Docker image it uses is built and run on every push.
+
+The README, Template 1 and the technical paper now open the problem with four recent disasters where people had to be found as networks failed, each from published reports. The Kahramanmaraş earthquakes in Türkiye and Syria, February 2023, the Mai Mahiu flash flood in Kenya, April 2024, the Valencia floods in Spain, October 2024, and the Himalayan flash flood on the Nepal and Tibet border, August 2026.
