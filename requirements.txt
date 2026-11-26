@@ -2,7 +2,7 @@
 # to update one, change it here and run the tests first
 
 # core image math and frame processing
-numpy==2.5.4
+numpy==2.5.5
 opencv-python==5.0.0.93
 
 # web framework for the unit dashboard and the command center
