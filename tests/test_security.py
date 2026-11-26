@@ -71,7 +71,8 @@ def test_every_reply_has_the_protective_headers(client):
     for path in ("/", "/api/v1/health", "/api/v1/units"):
         headers = client.get(path, headers=boss).headers
         assert headers["X-Content-Type-Options"] == "nosniff" and headers["X-Frame-Options"] == "DENY"
-        assert headers["Referrer-Policy"] == "no-referrer"
+        # map tile servers get the site's address only, never a page's path
+        assert headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
     # replies holding where people are are never cached
     assert client.get("/api/v1/detections", headers=boss).headers["Cache-Control"] == "no-store"
 

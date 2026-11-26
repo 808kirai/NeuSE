@@ -253,3 +253,9 @@ Joshua's redesign of the command center and the unit dashboard was kept as it is
 - Smaller fixes. A lighter blue for searched ground in daylight, singular wording for one earlier alert, a shorter time column, and the retry flag kept on one line
 
 Checked in Chrome at 1440 by 900 and 390 by 844 in both themes, with no content security policy errors and no sideways scrolling on a phone. There were no emojis to remove in the pages, the code or the documents.
+
+Later the same day, after the team looked at the pages
+
+- OpenStreetMap began refusing the map tiles with Access blocked. The security header that told browsers to send no referrer was the cause, since OpenStreetMap's tile policy requires one. Pages now send other sites only the server's own address, never a page's path, and the tiles load again
+- One light theme on both pages, and the theme switch is gone. Detection is not affected, the theme is only the pages' colours
+- The status button blinks green while live, and black and white while connecting. Write report blinks black and white while it works, and a unit, alert or sighting card blinks a few times when clicked, so it is clear which one the map jumped to. Blinks are slow, and anyone set to reduce motion sees the same colours held still

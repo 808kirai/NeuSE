@@ -255,10 +255,11 @@ def create_app(db_path=None, token=None, llm=None, unit_tokens=None, alert_setti
     @app.after_request
     def harden(response):
         # headers that stop the page being framed by another site, files being read as another type,
-        # addresses leaking to other sites, and replies holding where people are being cached
+        # page addresses leaking to other sites, and replies holding where people are being cached
+        # other sites get only this server's own address, which openstreetmap's tile servers require
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         if request.path.startswith("/api/"):

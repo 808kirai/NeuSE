@@ -4,10 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NeuSE field unit</title>
-    <script>
-        // the day or night theme chosen last on this unit, night by default for work in the dark
-        try { if (localStorage.getItem('neuse-theme') === 'day') document.documentElement.dataset.theme = 'day'; } catch (e) {}
-    </script>
     <style>
         * {
             box-sizing: border-box;
@@ -15,19 +11,8 @@
             padding: 0;
         }
 
+        /* one light theme, easy to read in daylight */
         :root {
-            color-scheme: dark;
-            --bg: #0B1215;
-            --surface: #121D21;
-            --raised: #1B292E;
-            --text: #F3F7F6;
-            --muted: #B7C4C6;
-            --border: #687A80;
-            --line: #24363C;
-            --accent: #57D9CC;
-            --candidate: #63DCE8;
-            --review: #FFD07A;
-            --error: #FF8181;
             --space-1: 4px;
             --space-2: 8px;
             --space-3: 12px;
@@ -36,9 +21,6 @@
             --space-8: 32px;
             --radius: 12px;
             --field-target: 56px;
-        }
-
-        [data-theme="day"] {
             color-scheme: light;
             --bg: #F2F5F3;
             --surface: #FFFFFF;
@@ -49,6 +31,7 @@
             --line: #CBD6D2;
             --accent: #006F69;
             --candidate: #006C84;
+            --online: #126B3F;
             --review: #7A4900;
             --error: #A12226;
         }
@@ -81,42 +64,40 @@
 
         .header-tools { display: flex; align-items: center; gap: 12px; }
 
+        /* live blinks green, an action in progress blinks black and white, slow enough to be safe to watch */
+        @keyframes live-blink {
+            0%, 100% { background: var(--online); border-color: var(--online); color: #FFFFFF; }
+            50% { background: var(--surface); border-color: var(--online); color: var(--online); }
+        }
+
+        @keyframes busy-blink {
+            0%, 100% { background: #000000; border-color: #000000; color: #FFFFFF; }
+            50% { background: #FFFFFF; border-color: #000000; color: #000000; }
+        }
+
         .status-pill {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
             min-height: 44px;
-            padding: 8px 14px;
+            padding: 8px 16px;
             border: 1px solid var(--line);
             border-radius: 999px;
             background: var(--surface);
             color: var(--text);
             font-size: 14px;
+            font-weight: 600;
         }
 
-        .status-pill::before {
-            content: "";
-            width: 9px;
-            height: 9px;
-            border-radius: 50%;
-            background: var(--candidate);
+        .status-pill[data-state="ready"] { animation: live-blink 1.6s ease-in-out infinite; }
+        .status-pill[data-state="loading"] { animation: busy-blink 1s steps(1) infinite; }
+        .status-pill[data-state="error"] { border-color: var(--error); background: var(--error); color: #FFFFFF; }
+
+        @media (prefers-reduced-motion: reduce) {
+            /* no blinking, the same colours held still */
+            .status-pill { animation: none !important; }
+            .status-pill[data-state="ready"] { background: var(--online); border-color: var(--online); color: #FFFFFF; }
+            .status-pill[data-state="loading"] { background: #000000; border-color: #000000; color: #FFFFFF; }
         }
-
-        .status-pill[data-state="loading"]::before { background: var(--muted); }
-        .status-pill[data-state="error"]::before { background: var(--error); }
-
-        .theme-toggle {
-            min-height: 44px;
-            padding: 8px 12px;
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            color: var(--text);
-            background: var(--surface);
-            font: inherit;
-            cursor: pointer;
-        }
-
-        .theme-toggle:hover, .theme-toggle:focus-visible { border-color: var(--accent); }
         :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 
         .connection-note {
@@ -236,7 +217,6 @@
             </div>
             <div class="header-tools">
                 <div class="status-pill" id="system-status" data-state="loading" role="status" aria-live="polite">Connecting</div>
-                <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Day theme</button>
             </div>
         </header>
 
@@ -370,20 +350,6 @@
             }
         }
 
-        // day theme for work in daylight, remembered on this unit
-        const themeToggle = document.getElementById('theme-toggle');
-        function showTheme() {
-            const day = document.documentElement.dataset.theme === 'day';
-            themeToggle.textContent = day ? 'Night theme' : 'Day theme';
-            themeToggle.setAttribute('aria-pressed', String(day));
-        }
-        themeToggle.addEventListener('click', () => {
-            const day = document.documentElement.dataset.theme !== 'day';
-            document.documentElement.dataset.theme = day ? 'day' : 'night';
-            try { localStorage.setItem('neuse-theme', day ? 'day' : 'night'); } catch (e) {}
-            showTheme();
-        });
-        showTheme();
 
         // refresh every two seconds and once right away
         setInterval(updateTelemetry, 2000);

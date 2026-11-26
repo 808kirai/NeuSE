@@ -7,42 +7,19 @@
     <!-- leaflet 1.9.4 map library, served from this server so the page works when other sites cannot be reached -->
     <link rel="stylesheet" href="{{ url_for('static', filename='leaflet/leaflet.css') }}">
     <script src="{{ url_for('static', filename='leaflet/leaflet.js') }}"></script>
-    <script nonce="{{ nonce }}">
-        // the day or night theme the coordinator chose last, night by default for work in the dark
-        try { if (localStorage.getItem('neuse-theme') === 'day') document.documentElement.dataset.theme = 'day'; } catch (e) {}
-    </script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; }
 
+        /* one light theme, easy to read in daylight and on a projector */
         :root {
-            color-scheme: dark;
-            --bg: #0B1215;
-            --surface: #121D21;
-            --raised: #1B292E;
-            --text: #F3F7F6;
-            --muted: #B7C4C6;
-            --border: #687A80;
-            --line: #24363C;
-            --accent: #57D9CC;
-            --online: #80DDA8;
-            --offline: #B7C4C6;
-            --fresh: #63DCE8;
-            --recent: #90BFFF;
-            --old: #B7C4C6;
-            --searched: #67A9F2;
-            --review: #FFD07A;
-            --error: #FF8181;
+            color-scheme: light;
             --space-1: 4px;
             --space-2: 8px;
             --space-3: 12px;
             --space-4: 16px;
             --space-6: 24px;
             --radius: 12px;
-        }
-
-        [data-theme="day"] {
-            color-scheme: light;
             --bg: #F2F5F3;
             --surface: #FFFFFF;
             --raised: #E6ECE9;
@@ -89,42 +66,32 @@
         .header-meta { display: flex; align-items: center; gap: 12px; }
         .summary { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 
-        .theme-toggle {
-            min-height: 40px;
-            padding: 7px 12px;
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            background: var(--surface);
-            color: var(--text);
-            font: inherit;
-            font-size: 14px;
-            cursor: pointer;
+        /* live blinks green, an action in progress blinks black and white, slow enough to be safe to watch */
+        @keyframes live-blink {
+            0%, 100% { background: var(--online); border-color: var(--online); color: #FFFFFF; }
+            50% { background: var(--surface); border-color: var(--online); color: var(--online); }
         }
 
-        .theme-toggle:hover { border-color: var(--accent); }
+        @keyframes busy-blink {
+            0%, 100% { background: #000000; border-color: #000000; color: #FFFFFF; }
+            50% { background: #FFFFFF; border-color: #000000; color: #000000; }
+        }
 
         .live-status {
             display: inline-flex;
             align-items: center;
             min-height: 40px;
-            gap: 8px;
-            padding: 7px 12px;
+            padding: 7px 14px;
             border: 1px solid var(--line);
             border-radius: 999px;
             background: var(--surface);
             font-size: 14px;
+            font-weight: 600;
         }
 
-        .live-status::before {
-            content: "";
-            width: 9px;
-            height: 9px;
-            border-radius: 50%;
-            background: var(--online);
-        }
-
-        .live-status[data-state="loading"]::before { background: var(--muted); }
-        .live-status[data-state="error"]::before { background: var(--error); }
+        .live-status[data-state="ready"] { animation: live-blink 1.6s ease-in-out infinite; }
+        .live-status[data-state="loading"] { animation: busy-blink 1s steps(1) infinite; }
+        .live-status[data-state="error"] { border-color: var(--error); background: var(--error); color: #FFFFFF; }
 
         .overview {
             flex: none;
@@ -273,8 +240,12 @@
             cursor: pointer;
         }
 
-        .report-controls button:disabled { opacity: 0.6; cursor: wait; }
-        [data-theme="day"] .report-controls button { color: #FFFFFF; }
+        .report-controls button:disabled { cursor: wait; }
+        .report-controls button { color: #FFFFFF; }
+        .report-controls button[data-busy] { animation: busy-blink 1s steps(1) infinite; }
+
+        /* a card blinks a few times when clicked, so it is clear which one the map jumped to */
+        .unit.is-active, .hit.is-active { animation: busy-blink 0.4s steps(1) 4; }
         .report-controls button:hover { filter: brightness(1.08); }
         .report-text {
             padding: 10px 12px;
@@ -322,8 +293,7 @@
             background: var(--bg);
             color: var(--text);
         }
-        #login button { border: none; background: var(--accent); color: #0B1215; font-weight: 700; }
-        [data-theme="day"] #login button { color: #FFFFFF; }
+        #login button { border: none; background: var(--accent); color: #FFFFFF; font-weight: 700; }
 
         @media (max-width: 1000px) {
             .overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -348,6 +318,12 @@
 
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+            /* no blinking, the same colours held still */
+            .live-status, .report-controls button, .unit, .hit { animation: none !important; }
+            .live-status[data-state="ready"] { background: var(--online); border-color: var(--online); color: #FFFFFF; }
+            .live-status[data-state="loading"], .report-controls button[data-busy] {
+                background: #000000; border-color: #000000; color: #FFFFFF;
+            }
         }
     </style>
 </head>
@@ -360,7 +336,6 @@
         <div class="header-meta">
             <div class="live-status" id="live-status" data-state="loading" role="status" aria-live="polite">Connecting</div>
             <div class="summary" id="summary">Waiting for data</div>
-            <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Day theme</button>
         </div>
     </header>
 
@@ -488,6 +463,13 @@
         }
 
         // text from units goes in with textContent only, never as html
+        function flash(card) {
+            card.classList.remove('is-active');
+            void card.offsetWidth;
+            card.classList.add('is-active');
+            card.addEventListener('animationend', () => card.classList.remove('is-active'), { once: true });
+        }
+
         function el(tag, className, text) {
             const node = document.createElement(tag);
             if (className) node.className = className;
@@ -541,7 +523,7 @@
                 card.append(name, meta);
                 card.setAttribute('role', 'button');
                 card.tabIndex = 0;
-                const focusUnit = () => lookAt(unit.latitude, unit.longitude, 17);
+                const focusUnit = () => { flash(card); lookAt(unit.latitude, unit.longitude, 17); };
                 card.addEventListener('click', focusUnit);
                 card.addEventListener('keydown', event => {
                     if (event.key === 'Enter' || event.key === ' ') {
@@ -606,7 +588,7 @@
                 card.append(el('div', 'meta', placed(hit)));
                 card.setAttribute('role', 'button');
                 card.tabIndex = 0;
-                const focusHit = () => lookAt(hit.latitude, hit.longitude, 18);
+                const focusHit = () => { flash(card); lookAt(hit.latitude, hit.longitude, 18); };
                 card.addEventListener('click', focusHit);
                 card.addEventListener('keydown', event => {
                     if (event.key === 'Enter' || event.key === ' ') {
@@ -670,7 +652,7 @@
                 else if (alert.delivered) card.append(el('div', 'meta', 'Text sent'));
                 card.setAttribute('role', 'button');
                 card.tabIndex = 0;
-                const focusAlert = () => lookAt(alert.latitude, alert.longitude, 18);
+                const focusAlert = () => { flash(card); lookAt(alert.latitude, alert.longitude, 18); };
                 card.addEventListener('click', focusAlert);
                 card.addEventListener('keydown', event => {
                     if (event.key === 'Enter' || event.key === ' ') {
@@ -759,6 +741,7 @@
             // reports are written on request, so a language model is only called when a coordinator asks
             const button = document.getElementById('report-button');
             button.disabled = true;
+            button.dataset.busy = '';
             document.getElementById('report-text').textContent = 'Writing the report…';
             document.getElementById('report-note').textContent = '';
             try {
@@ -773,27 +756,10 @@
                 document.getElementById('report-text').textContent = 'The report could not be written (' + e.message + '). Try again.';
             }
             button.disabled = false;
+            delete button.dataset.busy;
         }
 
         document.getElementById('report-button').addEventListener('click', writeReport);
-
-        // day theme for coordinators working in daylight, remembered on this browser
-        const themeToggle = document.getElementById('theme-toggle');
-        function showTheme() {
-            const day = document.documentElement.dataset.theme === 'day';
-            themeToggle.textContent = day ? 'Night theme' : 'Day theme';
-            themeToggle.setAttribute('aria-pressed', String(day));
-        }
-        themeToggle.addEventListener('click', () => {
-            const day = document.documentElement.dataset.theme !== 'day';
-            document.documentElement.dataset.theme = day ? 'day' : 'night';
-            try { localStorage.setItem('neuse-theme', day ? 'day' : 'night'); } catch (e) {}
-            showTheme();
-            // map colours come from the theme, so redraw them now
-            lastSearched = 0;
-            refresh();
-        });
-        showTheme();
 
         refresh();
         setInterval(refresh, 5000);
