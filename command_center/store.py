@@ -484,15 +484,23 @@ def unit_state(unit, now, online_window, detecting_window):
     # a unit can keep syncing after its camera or detector has stopped, so the two are told apart
     contact = parse_time(unit["last_contact"])
     online = contact is not None and (now - contact).total_seconds() <= online_window
-    idle = None
+    # None when the unit has never said, older units do not send it
+    idle = detecting = None
     status = parse_time(unit.get("last_status"))
     if unit.get("detector_idle_s") is not None and status is not None:
+        since = max(0.0, (now - status).total_seconds())
         # how quiet the detector was when the note was sent, plus the time since the note
-        idle = unit["detector_idle_s"] + max(0.0, (now - status).total_seconds())
+        idle = unit["detector_idle_s"] + since
+        if unit["detector_idle_s"] > detecting_window:
+            # the unit itself said its detector had gone quiet
+            detecting = False
+        elif since <= detecting_window:
+            detecting = online
+        # otherwise the unit has not been heard from lately, which says nothing about its detector
+        # its link may simply be down while it keeps searching, so it is left unknown, not called not searching
     return {
         "online": online,
-        # None when the unit has never said, older units do not send it
-        "detecting": None if idle is None else (online and idle <= detecting_window),
+        "detecting": detecting,
         "detector_idle_s": None if idle is None else round(idle),
     }
 

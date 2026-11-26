@@ -23,7 +23,7 @@ Who and what to protect against
 Safety of the detection itself
 
 - A blind camera never makes ground look searched. A missing, unreadable, flat or saturated frame does not mark any ground as searched, and the unit shows as not searching while it lasts. Frames count as blind when their brightness spreads less than 2 grey levels, `NEUSE_MIN_FRAME_SPREAD`. The flattest of HIT-UAV's 2,898 real frames spreads 11. Tests in `tests/test_coverage.py`
-- A unit that stops detecting is shown. The map marks a unit that is in contact but whose detector has been quiet for 30 seconds as not searching, so a coordinator never mistakes a broken unit for empty ground
+- A unit that stops detecting is shown. The map marks a unit that is in contact but whose detector has been quiet for 30 seconds as not searching, so a coordinator never mistakes a broken unit for empty ground. Only the unit's own note can say that. A unit whose link drops goes on searching, so silence alone makes it offline after 60 seconds, never not searching
 - Confidence means what it says. Scores are calibrated on the validation images, so a hit shown as 0.9 is a person about 9 times in 10. On the test images, hits at 0.9 or more were people 92% of the time
 - Sightings are never turned into a head count. One person can appear in many frames, so the map, reports and alerts count sightings. A model report that counts people is refused, see below
 - Every number is measured on held out data and reported with its limits, including how the detector does on flights it has never seen and where it is weakest, by day and at 120 to 130 m

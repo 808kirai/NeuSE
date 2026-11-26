@@ -261,3 +261,10 @@ Later the same day, after the team looked at the pages
 - The status button blinks green while live, and black and white while connecting. Write report blinks black and white while it works, and a unit, alert or sighting card blinks a few times when clicked, so it is clear which one the map jumped to. Blinks are slow, and anyone set to reduce motion sees the same colours held still
 - Bolder text on both pages. Windows 11's variable Segoe UI comes first, since plain Segoe UI has no medium weight and jumps from regular to semibold
 - The map scrolls like a touchpad. Two fingers move it in any direction and a pinch zooms around the pointer, where before two fingers zoomed. A mouse wheel moves it up and down, and ctrl with the wheel zooms. Arrow buttons under the zoom buttons move it too, with a middle button that shows every unit and sighting. The icons are built as elements, since the page never sets HTML from strings
+
+2026-11-26 - Two fixes found while recording the demo video
+
+- A unit whose link dropped was shown as not searching after 30 seconds, while it still counted as online for 60. The command center added the time since the unit's last note to how long its detector had been quiet, so silence looked like a stopped detector, and the situation report repeated it. Now only the unit's own note can say its detector is quiet. A unit that has only gone silent keeps its last heard time and goes offline after 60 seconds. A unit whose last note already said its detector was quiet stays not searching
+- Before the coordinator token was entered, the map page said Connection lost behind the token dialog, though nothing had failed. It now says Token needed and asks for the token, and goes live once the right one is entered
+
+Three new tests cover the first fix and fail on the old code. Both fixes were checked in Chrome. 372 tests pass.

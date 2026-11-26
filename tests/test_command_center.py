@@ -100,6 +100,39 @@ def test_a_unit_that_syncs_but_no_longer_detects_is_not_shown_as_searching(clien
     assert units["unit-3"]["detecting"] is None
 
 
+def test_a_unit_whose_link_drops_is_not_called_not_searching(client, tmp_path):
+    # both were last heard 45 s ago, so both still count as online for a few more seconds
+    # unit-1's last note said its detector was busy, silence since then says nothing about the detector
+    # unit-2's last note already said its detector had been quiet for 2 minutes
+    client.post("/api/v1/status", json={**note("unit-1"), "detector_idle_s": 1.0})
+    client.post("/api/v1/status", json={**note("unit-2"), "detector_idle_s": 120.0})
+    with store.connect(tmp_path / "center.db") as conn:
+        heard = (datetime.now(timezone.utc) - timedelta(seconds=45)).isoformat(timespec="seconds")
+        conn.execute("update units set last_status_at = ?", (heard,))
+    units = {u["unit_id"]: u for u in client.get("/api/v1/units").get_json()["units"]}
+    assert units["unit-1"]["online"] is True and units["unit-1"]["detecting"] is None
+    assert units["unit-2"]["online"] is True and units["unit-2"]["detecting"] is False
+    assert units["unit-2"]["detector_idle_s"] >= 165
+
+
+def test_a_unit_heard_from_lately_is_judged_by_its_own_note():
+    now = datetime(2026, 11, 26, 12, 0, tzinfo=timezone.utc)
+
+    def state(idle, seconds_ago):
+        heard = (now - timedelta(seconds=seconds_ago)).isoformat()
+        unit = {"last_contact": heard, "last_status": heard, "detector_idle_s": idle}
+        return store.unit_state(unit, now, online_window=60, detecting_window=30)
+
+    assert state(2.0, 5)["detecting"] is True
+    # the detector was busy at the last note, the note is 20 s old, so it still counts as searching
+    assert state(25.0, 20)["detecting"] is True
+    assert state(31.0, 5)["detecting"] is False
+    # silent for longer than the detecting window, unknown rather than not searching
+    assert state(2.0, 40)["detecting"] is None
+    # offline units are never shown as searching
+    assert state(2.0, 61)["detecting"] is None and state(2.0, 61)["online"] is False
+
+
 def test_unit_status_note_says_how_long_the_detector_has_been_quiet(isolated_db):
     logger = data_logger()
     logger.note_status(None, "person-check", 10, 20.0)

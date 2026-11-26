@@ -834,8 +834,17 @@
                     liveStatus.dataset.state = 'ready';
                 }
             } catch (e) {
-                document.getElementById('summary').textContent = 'Showing the last data received';
                 const liveStatus = document.getElementById('live-status');
+                // nothing has failed while the page waits for the coordinator token, so it does not say the connection was lost
+                if (e.message === 'token needed') {
+                    document.getElementById('summary').textContent = 'Enter the coordinator token to see the map';
+                    if (liveStatus.dataset.state !== 'locked') {
+                        liveStatus.textContent = 'Token needed';
+                        liveStatus.dataset.state = 'locked';
+                    }
+                    return;
+                }
+                document.getElementById('summary').textContent = 'Showing the last data received';
                 if (liveStatus.dataset.state !== 'error') {
                     liveStatus.textContent = 'Connection lost';
                     liveStatus.dataset.state = 'error';

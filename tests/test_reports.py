@@ -99,6 +99,17 @@ def test_report_says_when_a_unit_is_in_contact_but_not_searching(db):
     assert "unit-1 holds 3 sightings the command center refused" in text
 
 
+def test_report_does_not_call_a_unit_with_a_dropped_link_not_searching(db):
+    # unit-1's detector was busy at its last note, then its link dropped 45 s ago
+    heard = (now - timedelta(seconds=45)).isoformat(timespec="seconds")
+    with store.connect(db) as conn:
+        conn.execute("update units set detector_idle_s = 1, last_status_at = ? where unit_id = 'unit-1'", (heard,))
+    facts = reports.gather(db, minutes=30, now=now)
+    unit = next(u for u in facts["units"] if u["unit_id"] == "unit-1")
+    assert unit["online"] is True and unit["detecting"] is None
+    assert "not searching" not in reports.write_template(facts)
+
+
 def test_report_says_when_sightings_are_only_placed_at_the_unit(db):
     text = reports.write_template(reports.gather(db, minutes=30, now=now))
     assert "3 sightings could only be placed at the unit's own position" in text
