@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuSE · Edge Telemetry Console</title>
+    <title>NeuSE field unit</title>
+    <script>
+        // the day or night theme chosen last on this unit, night by default for work in the dark
+        try { if (localStorage.getItem('neuse-theme') === 'day') document.documentElement.dataset.theme = 'day'; } catch (e) {}
+    </script>
     <style>
         * {
             box-sizing: border-box;
@@ -19,6 +23,7 @@
             --text: #F3F7F6;
             --muted: #B7C4C6;
             --border: #687A80;
+            --line: #24363C;
             --accent: #57D9CC;
             --candidate: #63DCE8;
             --review: #FFD07A;
@@ -41,6 +46,7 @@
             --text: #142126;
             --muted: #4C5F63;
             --border: #6D7B7F;
+            --line: #CBD6D2;
             --accent: #006F69;
             --candidate: #006C84;
             --review: #7A4900;
@@ -65,11 +71,12 @@
             align-items: center;
             padding: 8px 0 20px;
             margin-bottom: 24px;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid var(--line);
             gap: 16px;
         }
 
         .brand-title { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+        .brand-unit { font-weight: 500; color: var(--muted); }
         .brand-sub { font-size: 15px; color: var(--muted); margin-top: 4px; }
 
         .header-tools { display: flex; align-items: center; gap: 12px; }
@@ -80,7 +87,7 @@
             gap: 8px;
             min-height: 44px;
             padding: 8px 14px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 999px;
             background: var(--surface);
             color: var(--text);
@@ -95,12 +102,13 @@
             background: var(--candidate);
         }
 
+        .status-pill[data-state="loading"]::before { background: var(--muted); }
         .status-pill[data-state="error"]::before { background: var(--error); }
 
         .theme-toggle {
             min-height: 44px;
             padding: 8px 12px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 8px;
             color: var(--text);
             background: var(--surface);
@@ -114,7 +122,7 @@
         .connection-note {
             margin: -8px 0 20px;
             padding: 12px 16px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-left: 4px solid var(--candidate);
             border-radius: 8px;
             background: var(--surface);
@@ -143,16 +151,17 @@
         .metric-card {
             min-height: 116px;
             background: var(--surface);
-            border: 1px solid var(--border);
             border-radius: var(--radius);
             padding: 18px 20px;
         }
 
+        /* waiting sightings need a look, refused sightings need fixing */
+        .metric-card[data-state="warn"] .metric-value { color: var(--review); }
+        .metric-card[data-state="bad"] .metric-value { color: var(--error); }
+
         .metric-label {
             color: var(--muted);
             font-size: 14px;
-            letter-spacing: 0.02em;
-            text-transform: none;
             margin-bottom: 8px;
         }
 
@@ -169,9 +178,11 @@
             font-size: 13px;
         }
 
+        .metric-hint code { font-size: 12px; white-space: nowrap; }
+
         .table-wrapper {
             background: var(--surface);
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: var(--radius);
             overflow-x: auto;
         }
@@ -189,13 +200,13 @@
             background: var(--raised);
             color: var(--muted);
             font-size: 13px;
-            letter-spacing: 0.04em;
-            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            border-bottom: 1px solid var(--line);
         }
 
         td {
-            padding: 16px 18px;
-            border-bottom: 1px solid var(--border);
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--line);
             color: var(--text);
             font-variant-numeric: tabular-nums lining-nums;
         }
@@ -220,25 +231,23 @@
     <div class="container">
         <header>
             <div>
-                <div class="brand-title">NeuSE</div>
-                <div class="brand-sub">Neural Sentinel Edge · Search &amp; Rescue Telemetry</div>
+                <div class="brand-title">NeuSE <span class="brand-unit">field unit</span></div>
+                <div class="brand-sub">What this unit has found, saved and still has to send.</div>
             </div>
             <div class="header-tools">
-                <div class="status-pill" id="system-status" data-state="loading" role="status" aria-live="polite">
-                    Connecting to local telemetry...
-                </div>
-                <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Switch to day theme</button>
+                <div class="status-pill" id="system-status" data-state="loading" role="status" aria-live="polite">Connecting</div>
+                <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Day theme</button>
             </div>
         </header>
 
         <p class="connection-note">
-            This page reads the field unit's local telemetry. It does not indicate whether the command center link is connected.
+            This page shows this unit only and works with no network. It does not show whether the command center link is up.
         </p>
 
         <section aria-labelledby="telemetry-heading">
             <div class="section-heading">
-                <h2 id="telemetry-heading">Unit telemetry</h2>
-                <p>Refreshes automatically every 2 seconds</p>
+                <h2 id="telemetry-heading">This unit</h2>
+                <p>Updates every 2 seconds</p>
             </div>
             <div class="metrics-grid">
             <div class="metric-card">
@@ -246,47 +255,47 @@
                 <div class="metric-value" id="detector-name">—</div>
             </div>
             <div class="metric-card">
-                <div class="metric-label">Avg. Processing Time</div>
+                <div class="metric-label">Time per frame</div>
                 <div class="metric-value" id="avg-latency">—</div>
-                <div class="metric-hint">Across recent frames</div>
+                <div class="metric-hint">Average of the last 100 frames</div>
             </div>
             <div class="metric-card">
-                <div class="metric-label">Total Detections</div>
+                <div class="metric-label">Sightings</div>
                 <div class="metric-value" id="detection-count">0</div>
-                <div class="metric-hint">Sightings logged on this unit</div>
+                <div class="metric-hint">Logged on this unit</div>
             </div>
-            <div class="metric-card">
-                <div class="metric-label">Waiting To Send</div>
+            <div class="metric-card" id="queued-card">
+                <div class="metric-label">Waiting to sync</div>
                 <div class="metric-value" id="queued-count">0</div>
-                <div class="metric-hint">Stored locally until acknowledged</div>
+                <div class="metric-hint">Kept here until the command center confirms them</div>
             </div>
-            <div class="metric-card">
-                <div class="metric-label">Rejected by Command Center</div>
+            <div class="metric-card" id="refused-card">
+                <div class="metric-label">Refused</div>
                 <div class="metric-value" id="refused-count">0</div>
-                <div class="metric-hint">Requires attention before retry</div>
+                <div class="metric-hint">Fix the cause, then run sync with <code>--retry-refused</code></div>
             </div>
             </div>
         </section>
 
         <section aria-labelledby="detections-heading">
         <div class="section-heading">
-            <h2 id="detections-heading">Recent detections</h2>
-            <p>Coordinates and confidence are estimates, not confirmation.</p>
+            <h2 id="detections-heading">Recent sightings</h2>
+            <p>Positions and confidence are estimates. Confirm on the ground.</p>
         </div>
         <div class="table-wrapper">
             <table>
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>Timestamp</th>
-                        <th>Coordinates</th>
+                        <th>Time</th>
+                        <th>Position</th>
                         <th>Confidence</th>
-                        <th>Peak Intensity</th>
+                        <th>Peak heat</th>
                     </tr>
                 </thead>
                 <tbody id="telemetry-body">
                     <tr>
-                        <td colspan="5" class="empty-row">Waiting for local telemetry...</td>
+                        <td colspan="5" class="empty-row">Loading this unit's sightings</td>
                     </tr>
                 </tbody>
             </table>
@@ -308,9 +317,11 @@
                 document.getElementById('detection-count').textContent = json.total || 0;
                 document.getElementById('queued-count').textContent = json.queued || 0;
                 document.getElementById('refused-count').textContent = json.refused || 0;
+                document.getElementById('queued-card').dataset.state = json.queued ? 'warn' : '';
+                document.getElementById('refused-card').dataset.state = json.refused ? 'bad' : '';
                 const status = document.getElementById('system-status');
                 if (status.dataset.state !== 'ready') {
-                    status.textContent = 'Local telemetry available';
+                    status.textContent = 'Live';
                     status.dataset.state = 'ready';
                 }
 
@@ -324,7 +335,7 @@
                     const cell = row.insertCell();
                     cell.colSpan = 5;
                     cell.className = 'empty-row';
-                    cell.textContent = 'No detections logged yet. This does not mean the area is clear.';
+                    cell.textContent = 'No sightings logged yet. This does not mean the area is clear.';
                     return;
                 }
 
@@ -335,10 +346,10 @@
                     // warm-spots has no confidence score so say so
                     const conf = typeof item.confidence === 'number'
                         ? (item.confidence * 100).toFixed(1) + '%'
-                        : 'n/a (warm-spots)';
+                        : 'None (warm spots)';
                     const cells = [
                         '#' + item.id,
-                        (item.timestamp || '').replace('T', ' '),
+                        (item.timestamp || '').replace('T', ' ').replace(/[+-]\d\d:\d\d$/, ''),
                         fmt(item.latitude, 5) + ', ' + fmt(item.longitude, 5),
                         conf,
                         typeof item.thermal_peak === 'number' ? item.thermal_peak + ' / 255' : '—',
@@ -353,21 +364,28 @@
                 console.error("Dashboard telemetry error:", err);
                 const status = document.getElementById('system-status');
                 if (status.dataset.state !== 'error') {
-                    status.textContent = 'Local telemetry unavailable';
+                    status.textContent = 'Not responding';
                     status.dataset.state = 'error';
                 }
             }
         }
 
+        // day theme for work in daylight, remembered on this unit
         const themeToggle = document.getElementById('theme-toggle');
+        function showTheme() {
+            const day = document.documentElement.dataset.theme === 'day';
+            themeToggle.textContent = day ? 'Night theme' : 'Day theme';
+            themeToggle.setAttribute('aria-pressed', String(day));
+        }
         themeToggle.addEventListener('click', () => {
-            const isDay = document.documentElement.dataset.theme !== 'day';
-            document.documentElement.dataset.theme = isDay ? 'day' : 'dark';
-            themeToggle.textContent = isDay ? 'Switch to night theme' : 'Switch to day theme';
-            themeToggle.setAttribute('aria-pressed', String(isDay));
+            const day = document.documentElement.dataset.theme !== 'day';
+            document.documentElement.dataset.theme = day ? 'day' : 'night';
+            try { localStorage.setItem('neuse-theme', day ? 'day' : 'night'); } catch (e) {}
+            showTheme();
         });
+        showTheme();
 
-        // refresh every two seconds and once rightaway
+        // refresh every two seconds and once right away
         setInterval(updateTelemetry, 2000);
         updateTelemetry();
     </script>

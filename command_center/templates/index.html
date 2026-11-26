@@ -7,6 +7,10 @@
     <!-- leaflet 1.9.4 map library, served from this server so the page works when other sites cannot be reached -->
     <link rel="stylesheet" href="{{ url_for('static', filename='leaflet/leaflet.css') }}">
     <script src="{{ url_for('static', filename='leaflet/leaflet.js') }}"></script>
+    <script nonce="{{ nonce }}">
+        // the day or night theme the coordinator chose last, night by default for work in the dark
+        try { if (localStorage.getItem('neuse-theme') === 'day') document.documentElement.dataset.theme = 'day'; } catch (e) {}
+    </script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; }
@@ -19,6 +23,7 @@
             --text: #F3F7F6;
             --muted: #B7C4C6;
             --border: #687A80;
+            --line: #24363C;
             --accent: #57D9CC;
             --online: #80DDA8;
             --offline: #B7C4C6;
@@ -44,13 +49,14 @@
             --text: #142126;
             --muted: #4C5F63;
             --border: #6D7B7F;
+            --line: #CBD6D2;
             --accent: #006F69;
             --online: #126B3F;
             --offline: #4C5F63;
             --fresh: #006C84;
             --recent: #0057A3;
             --old: #4C5F63;
-            --searched: #245D91;
+            --searched: #3F86CF;
             --review: #7A4900;
             --error: #A12226;
         }
@@ -73,14 +79,29 @@
             align-items: center;
             flex: none;
             padding: 12px 20px;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid var(--line);
             gap: 12px 24px;
         }
 
         header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+        header h1 span { font-weight: 500; color: var(--muted); }
         .brand-subtitle { margin-top: 2px; color: var(--muted); font-size: 14px; }
-        .header-meta { display: flex; align-items: center; gap: 16px; }
-        .summary { color: var(--muted); font-size: 14px; }
+        .header-meta { display: flex; align-items: center; gap: 12px; }
+        .summary { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+        .theme-toggle {
+            min-height: 40px;
+            padding: 7px 12px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--surface);
+            color: var(--text);
+            font: inherit;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .theme-toggle:hover { border-color: var(--accent); }
 
         .live-status {
             display: inline-flex;
@@ -88,7 +109,7 @@
             min-height: 40px;
             gap: 8px;
             padding: 7px 12px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 999px;
             background: var(--surface);
             font-size: 14px;
@@ -102,6 +123,7 @@
             background: var(--online);
         }
 
+        .live-status[data-state="loading"]::before { background: var(--muted); }
         .live-status[data-state="error"]::before { background: var(--error); }
 
         .overview {
@@ -110,16 +132,19 @@
             grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 10px;
             padding: 12px 20px;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid var(--line);
         }
 
         .overview-card {
             min-width: 0;
             padding: 10px 14px;
-            border: 1px solid var(--border);
             border-radius: 10px;
             background: var(--surface);
         }
+
+        /* waiting sightings and alerts need a look, refused sightings need fixing */
+        .overview-card[data-state="warn"] .overview-value { color: var(--review); }
+        .overview-card[data-state="bad"] .overview-value { color: var(--error); }
 
         .overview-label { display: block; color: var(--muted); font-size: 13px; }
         .overview-value {
@@ -155,7 +180,7 @@
             width: 390px;
             padding: 14px;
             overflow-y: auto;
-            border-left: 1px solid var(--border);
+            border-left: 1px solid var(--line);
             background: var(--bg);
         }
 
@@ -165,7 +190,7 @@
             gap: 10px 14px;
             margin: 0 0 18px;
             padding: 12px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 10px;
             background: var(--surface);
             color: var(--muted);
@@ -196,11 +221,10 @@
             transform: rotate(45deg);
         }
         h2 {
-            margin: 18px 0 8px;
+            margin: 20px 0 8px;
             color: var(--muted);
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 600;
-            letter-spacing: 0.06em;
         }
 
         .unit, .hit {
@@ -208,7 +232,7 @@
             width: 100%;
             margin-bottom: 8px;
             padding: 12px 14px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 10px;
             background: var(--surface);
             color: var(--text);
@@ -254,7 +278,7 @@
         .report-controls button:hover { filter: brightness(1.08); }
         .report-text {
             padding: 10px 12px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 10px;
             background: var(--surface);
             font-size: 14px;
@@ -275,13 +299,14 @@
 
         #login form {
             width: 100%;
-            max-width: 360px;
+            max-width: 380px;
             padding: 24px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 12px;
             background: var(--surface);
         }
 
+        #login h1 { font-size: 20px; }
         #login p { margin: 8px 0 16px; color: var(--muted); font-size: 14px; line-height: 1.5; }
         #login input, #login button {
             width: 100%;
@@ -308,18 +333,17 @@
         @media (max-width: 760px) {
             body { height: auto; min-height: 100vh; }
             header { padding: 12px 16px; }
-            .header-meta { align-items: flex-end; flex-direction: column; gap: 4px; }
+            .header-meta { flex-wrap: wrap; gap: 8px 12px; }
             .overview { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 16px; }
-            main { min-height: 0; }
+            .overview-card:last-child { grid-column: span 2; }
+            main { flex-direction: column; min-height: 0; }
             #map-wrap { height: 48vh; min-height: 300px; }
             aside { width: 100%; max-height: none; padding: 16px; border-top-color: var(--border); }
         }
 
         @media (max-width: 420px) {
-            .overview { grid-template-columns: 1fr 1fr; }
             .overview-card { padding: 9px 10px; }
             .overview-value { font-size: 20px; }
-            .summary { max-width: 24ch; text-align: right; }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -331,20 +355,21 @@
     <header>
         <div>
             <h1>NeuSE <span>Command Center</span></h1>
-            <p class="brand-subtitle">Search coordination · sightings are not a headcount</p>
+            <p class="brand-subtitle">Every field unit on one map. Sightings count detections, not people.</p>
         </div>
         <div class="header-meta">
-            <div class="live-status" id="live-status" data-state="loading" role="status" aria-live="polite">Connecting...</div>
-            <div class="summary" id="summary">Waiting for the server</div>
+            <div class="live-status" id="live-status" data-state="loading" role="status" aria-live="polite">Connecting</div>
+            <div class="summary" id="summary">Waiting for data</div>
+            <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">Day theme</button>
         </div>
     </header>
 
     <section class="overview" aria-label="Current operation summary">
         <div class="overview-card"><span class="overview-label">Units online</span><strong class="overview-value" id="online-count">—</strong></div>
-        <div class="overview-card"><span class="overview-label">Sightings logged</span><strong class="overview-value" id="sighting-count">—</strong></div>
-        <div class="overview-card"><span class="overview-label">Waiting on units</span><strong class="overview-value" id="queued-count">—</strong></div>
-        <div class="overview-card"><span class="overview-label">Refused sightings</span><strong class="overview-value" id="refused-count">—</strong></div>
-        <div class="overview-card"><span class="overview-label">Alerts · last 24h</span><strong class="overview-value" id="alert-count">—</strong></div>
+        <div class="overview-card"><span class="overview-label">Sightings</span><strong class="overview-value" id="sighting-count">—</strong></div>
+        <div class="overview-card" id="queued-card"><span class="overview-label">Waiting to sync</span><strong class="overview-value" id="queued-count">—</strong></div>
+        <div class="overview-card" id="refused-card"><span class="overview-label">Refused</span><strong class="overview-value" id="refused-count">—</strong></div>
+        <div class="overview-card" id="alert-card"><span class="overview-label">Alerts, last 24 hours</span><strong class="overview-value" id="alert-count">—</strong></div>
     </section>
 
     <main>
@@ -359,9 +384,9 @@
                 <span><i class="dot sighting-dot" style="background: var(--fresh)"></i>Sighting, last 5 min</span>
                 <span><i class="dot sighting-dot" style="background: var(--recent)"></i>Last hour</span>
                 <span><i class="dot sighting-dot" style="background: var(--old)"></i>Older</span>
-                <span><i class="alert-key"></i>Cluster alert</span>
+                <span><i class="alert-key"></i>Alert area</span>
                 <label><input type="checkbox" id="show-searched" checked>
-                    <i class="square" style="background: var(--searched)"></i>Searched in the last 24 hours</label>
+                    <i class="square" style="background: var(--searched)"></i>Searched, last 24 hours</label>
             </div>
             <h2>Alerts</h2>
             <div id="alerts"><div class="empty">No alerts in the last 24 hours.</div></div>
@@ -377,22 +402,22 @@
                     </select>
                     <button id="report-button" type="button">Write report</button>
                 </div>
-                <div id="report-text" class="report-text">Write a report to summarise what the units have seen.</div>
+                <div id="report-text" class="report-text">Choose a time window, then write a report of sightings, searched ground and unit health.</div>
                 <div id="report-note" class="meta"></div>
             </div>
             <h2>Units</h2>
             <div id="units"><div class="empty">No units have reported yet.</div></div>
             <h2>Latest sightings</h2>
-            <div id="hits"><div class="empty">No detections yet.</div></div>
+            <div id="hits"><div class="empty">No sightings yet.</div></div>
         </aside>
     </main>
 
     <div id="login">
         <form id="login-form">
-            <h1>Command center token</h1>
-            <p>Detections show where people are, so this page needs the token set on the server.</p>
-            <input type="password" id="token" autocomplete="current-password" placeholder="Token" required>
-            <button type="submit">Open</button>
+            <h1>Enter the coordinator token</h1>
+            <p>Sightings show where people are, so the map needs the token set on the server.</p>
+            <input type="password" id="token" autocomplete="current-password" placeholder="Coordinator token" aria-label="Coordinator token" required>
+            <button type="submit">Open the map</button>
         </form>
     </div>
 
@@ -426,7 +451,7 @@
             map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([0, 20], 3);
             const background = L.tileLayer(tiles, { maxZoom: 19, attribution: plain(tilesCredit) }).addTo(map);
             background.once('tileerror', () =>
-                mapNote('The map background could not load. Units and sightings are still shown in the right places.'));
+                mapNote('The map background could not load. Units and sightings are still in the right places.'));
         } else {
             mapNote('The map could not load. Units and sightings are listed on the right.');
         }
@@ -508,11 +533,11 @@
                 meta.append(el('div', '', (unit.online ? 'Online' : 'Offline') + ', last heard ' + ago(unit.last_contact)));
                 // a unit can stay in contact after its camera or detector has stopped
                 if (unit.online && unit.detecting === false) {
-                    meta.append(el('div', 'backlog', 'Not searching, detector quiet for ' + quiet(unit.detector_idle_s)));
+                    meta.append(el('div', 'backlog', 'Not searching for ' + quiet(unit.detector_idle_s) + '. Check the camera.'));
                 }
                 meta.append(el('div', '', unit.detections + ' sightings' + (unit.detector ? ' with ' + unit.detector : '')));
-                if (unit.queued) meta.append(el('div', 'backlog', unit.queued + ' sightings waiting on the unit'));
-                if (unit.refused) meta.append(el('div', 'backlog needs-attention', unit.refused + ' sightings refused, check this unit'));
+                if (unit.queued) meta.append(el('div', 'backlog', unit.queued + ' sightings waiting to sync'));
+                if (unit.refused) meta.append(el('div', 'backlog needs-attention', unit.refused + ' sightings refused. Check this unit.'));
                 card.append(name, meta);
                 card.setAttribute('role', 'button');
                 card.tabIndex = 0;
@@ -541,7 +566,7 @@
 
         function placed(hit) {
             // a sighting is either worked out on the ground or only known to be near the unit
-            return hit.position_source === 'projected' ? 'estimated ground position' : 'placed at the unit, person may be nearby';
+            return hit.position_source === 'projected' ? 'Ground position estimated from the camera' : 'Placed at the unit, the person may be nearby';
         }
 
         function drawHits() {
@@ -571,7 +596,7 @@
 
             const list = document.getElementById('hits');
             list.replaceChildren();
-            if (!sorted.length) list.append(el('div', 'empty', 'No detections yet.'));
+            if (!sorted.length) list.append(el('div', 'empty', 'No sightings yet.'));
             for (const hit of sorted.slice(0, 25)) {
                 const card = el('div', 'hit');
                 card.append(el('div', 'unit-name', hit.unit_id));
@@ -624,13 +649,14 @@
         const alertMarkers = new Map();
 
         function textNote(data) {
-            if (data.problem) return 'Texts are not going out, ' + data.problem + '.';
-            return data.texts ? 'Alerts are also sent as text messages.' : 'Alerts are shown here only, texts are not set up.';
+            if (data.problem) return 'Text alerts are failing: ' + data.problem + '.';
+            return data.texts ? 'Alerts are also sent by text message.' : 'Text alerts are off, so alerts show here only.';
         }
 
         async function drawAlerts() {
             const data = await api('/api/v1/alerts?hours=24');
             document.getElementById('alert-count').textContent = data.alerts.length;
+            document.getElementById('alert-card').dataset.state = data.alerts.length ? 'warn' : '';
             const list = document.getElementById('alerts');
             list.replaceChildren();
             if (!data.alerts.length) list.append(el('div', 'empty', 'No alerts in the last 24 hours.'));
@@ -640,7 +666,7 @@
                 card.append(el('div', 'unit-name', alert.sightings + ' strong sightings near ' +
                     alert.latitude.toFixed(5) + ', ' + alert.longitude.toFixed(5)));
                 card.append(el('div', 'meta', ago(alert.created_at) + ', by ' + alert.units.join(', ')));
-                if (alert.sent_via && !alert.delivered) card.append(el('div', 'backlog needs-attention', 'Text not delivered, ' + alert.error));
+                if (alert.sent_via && !alert.delivered) card.append(el('div', 'backlog needs-attention', 'Text not delivered: ' + alert.error));
                 else if (alert.delivered) card.append(el('div', 'meta', 'Text sent'));
                 card.setAttribute('role', 'button');
                 card.tabIndex = 0;
@@ -654,7 +680,9 @@
                 });
                 list.append(card);
             }
-            if (data.alerts.length > 5) list.append(el('div', 'empty', (data.alerts.length - 5) + ' earlier alerts are marked on the map.'));
+            const earlier = data.alerts.length - 5;
+            if (earlier > 0) list.append(el('div', 'empty', earlier === 1 ? '1 earlier alert is on the map.'
+                                                                           : earlier + ' earlier alerts are on the map.'));
             for (const alert of data.alerts) {
                 if (!map) break;
                 let ring = alertMarkers.get(alert.id);
@@ -700,7 +728,7 @@
                     await drawAlerts();
                 } catch (e) {
                     document.getElementById('alert-count').textContent = '—';
-                    document.getElementById('alerts-note').textContent = 'Alerts are currently unavailable.';
+                    document.getElementById('alerts-note').textContent = 'Alerts could not load. The map and lists still update.';
                 }
                 const online = unitData.units.filter(u => u.online).length;
                 const queued = unitData.units.reduce((sum, unit) => sum + (unit.queued || 0), 0);
@@ -709,19 +737,19 @@
                 document.getElementById('sighting-count').textContent = unitData.detections;
                 document.getElementById('queued-count').textContent = queued;
                 document.getElementById('refused-count').textContent = refused;
-                document.getElementById('summary').textContent =
-                    online + ' of ' + unitData.units.length + ' units online, ' + unitData.detections +
-                    ' sightings · Updated ' + new Date().toLocaleTimeString();
+                document.getElementById('queued-card').dataset.state = queued ? 'warn' : '';
+                document.getElementById('refused-card').dataset.state = refused ? 'bad' : '';
+                document.getElementById('summary').textContent = 'Updated ' + new Date().toLocaleTimeString();
                 const liveStatus = document.getElementById('live-status');
                 if (liveStatus.dataset.state !== 'ready') {
-                    liveStatus.textContent = 'Command center connected';
+                    liveStatus.textContent = 'Live';
                     liveStatus.dataset.state = 'ready';
                 }
             } catch (e) {
-                document.getElementById('summary').textContent = 'Data may be stale';
+                document.getElementById('summary').textContent = 'Showing the last data received';
                 const liveStatus = document.getElementById('live-status');
                 if (liveStatus.dataset.state !== 'error') {
-                    liveStatus.textContent = 'Command center unavailable';
+                    liveStatus.textContent = 'Connection lost';
                     liveStatus.dataset.state = 'error';
                 }
             }
@@ -731,23 +759,41 @@
             // reports are written on request, so a language model is only called when a coordinator asks
             const button = document.getElementById('report-button');
             button.disabled = true;
-            document.getElementById('report-text').textContent = 'Writing...';
+            document.getElementById('report-text').textContent = 'Writing the report…';
             document.getElementById('report-note').textContent = '';
             try {
                 const minutes = document.getElementById('report-minutes').value;
                 const result = await api('/api/v1/report?minutes=' + minutes);
                 document.getElementById('report-text').textContent = result.text;
                 const source = result.source === 'model' ? 'Written by the language model from the measured facts'
-                                                         : 'Written from the template';
+                                                         : 'Written by the built-in template';
                 document.getElementById('report-note').textContent =
                     (result.note ? result.note : source) + ', ' + new Date(result.facts.generated_at).toLocaleTimeString();
             } catch (e) {
-                document.getElementById('report-text').textContent = 'Could not write the report, ' + e.message;
+                document.getElementById('report-text').textContent = 'The report could not be written (' + e.message + '). Try again.';
             }
             button.disabled = false;
         }
 
         document.getElementById('report-button').addEventListener('click', writeReport);
+
+        // day theme for coordinators working in daylight, remembered on this browser
+        const themeToggle = document.getElementById('theme-toggle');
+        function showTheme() {
+            const day = document.documentElement.dataset.theme === 'day';
+            themeToggle.textContent = day ? 'Night theme' : 'Day theme';
+            themeToggle.setAttribute('aria-pressed', String(day));
+        }
+        themeToggle.addEventListener('click', () => {
+            const day = document.documentElement.dataset.theme !== 'day';
+            document.documentElement.dataset.theme = day ? 'day' : 'night';
+            try { localStorage.setItem('neuse-theme', day ? 'day' : 'night'); } catch (e) {}
+            showTheme();
+            // map colours come from the theme, so redraw them now
+            lastSearched = 0;
+            refresh();
+        });
+        showTheme();
 
         refresh();
         setInterval(refresh, 5000);

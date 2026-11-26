@@ -240,3 +240,16 @@ Template 1, the technical paper and the handoff notes were updated to match.
 The organisers also said judges should be able to deploy entries themselves. `docs/DEPLOY.md` now starts with a ten minute deployment on any computer with Docker, flying demo units against it and checking the scores, with the Huawei Cloud steps as part 2. The Docker image it uses is built and run on every push.
 
 The README, Template 1 and the technical paper now open the problem with four recent disasters where people had to be found as networks failed, each from published reports. The Kahramanmaraş earthquakes in Türkiye and Syria, February 2023, the Mai Mahiu flash flood in Kenya, April 2024, the Valencia floods in Spain, October 2024, and the Himalayan flash flood on the Nepal and Tibet border, August 2026.
+
+2026-11-26 - Polish on the redesigned pages
+
+Joshua's redesign of the command center and the unit dashboard was kept as it is, a dark console with the overview along the top, the map and a side panel, and refined.
+
+- The map disappeared on phones, squeezed out beside the full width side panel. It now sits above the panel
+- Structure uses quiet lines, and the strong border is kept for controls and focus, so the cards no longer all shout at once
+- The waiting, refused and alerts numbers turn amber or red only when they are above zero, so colour means someone should look
+- The day theme he built for the dashboard now also switches the command center, and both remember the choice
+- One vocabulary throughout. Sightings everywhere instead of a mix with detections, sentence case labels, and status lines that say what to do, such as Not searching for 2 min. Check the camera
+- Smaller fixes. A lighter blue for searched ground in daylight, singular wording for one earlier alert, a shorter time column, and the retry flag kept on one line
+
+Checked in Chrome at 1440 by 900 and 390 by 844 in both themes, with no content security policy errors and no sideways scrolling on a phone. There were no emojis to remove in the pages, the code or the documents.
