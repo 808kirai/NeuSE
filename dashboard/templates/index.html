@@ -26,7 +26,7 @@
             --surface: #FFFFFF;
             --raised: #E6ECE9;
             --text: #142126;
-            --muted: #4C5F63;
+            --muted: #3B4E52;
             --border: #6D7B7F;
             --line: #CBD6D2;
             --accent: #006F69;
@@ -40,7 +40,9 @@
             background: var(--bg);
             color: var(--text);
             padding: 24px;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            /* the variable segoe ui of windows 11 has a true medium weight, plain segoe ui jumps from regular to semibold */
+            font-family: "Segoe UI Variable Text", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            font-weight: 500;
             font-size: 16px;
             line-height: 1.45;
             -webkit-font-smoothing: antialiased;
@@ -59,7 +61,7 @@
         }
 
         .brand-title { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
-        .brand-unit { font-weight: 500; color: var(--muted); }
+        .brand-unit { font-weight: 600; color: var(--muted); }
         .brand-sub { font-size: 15px; color: var(--muted); margin-top: 4px; }
 
         .header-tools { display: flex; align-items: center; gap: 12px; }
@@ -148,6 +150,7 @@
 
         .metric-value {
             font-size: 28px;
+            font-weight: 700;
             line-height: 1.2;
             font-variant-numeric: tabular-nums lining-nums;
             overflow-wrap: anywhere;
@@ -181,7 +184,7 @@
             background: var(--raised);
             color: var(--muted);
             font-size: 13px;
-            font-weight: 600;
+            font-weight: 700;
             border-bottom: 1px solid var(--line);
         }
 

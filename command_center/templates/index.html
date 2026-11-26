@@ -24,7 +24,7 @@
             --surface: #FFFFFF;
             --raised: #E6ECE9;
             --text: #142126;
-            --muted: #4C5F63;
+            --muted: #3B4E52;
             --border: #6D7B7F;
             --line: #CBD6D2;
             --accent: #006F69;
@@ -43,7 +43,9 @@
             min-height: 620px;
             background: var(--bg);
             color: var(--text);
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            /* the variable segoe ui of windows 11 has a true medium weight, plain segoe ui jumps from regular to semibold */
+            font-family: "Segoe UI Variable Text", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            font-weight: 500;
             display: flex;
             flex-direction: column;
             -webkit-font-smoothing: antialiased;
@@ -61,7 +63,7 @@
         }
 
         header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
-        header h1 span { font-weight: 500; color: var(--muted); }
+        header h1 span { font-weight: 600; color: var(--muted); }
         .brand-subtitle { margin-top: 2px; color: var(--muted); font-size: 14px; }
         .header-meta { display: flex; align-items: center; gap: 12px; }
         .summary { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -178,6 +180,33 @@
         .sighting-dot { border-radius: 1px !important; transform: rotate(45deg); }
         .alert-key { width: 12px; height: 12px; flex: none; border: 2px dashed var(--review); border-radius: 50%; }
         .sighting-marker { border: 0; background: transparent; }
+
+        /* arrows that move the map, under the zoom buttons, with a button in the middle to see everything */
+        .pan-control {
+            display: grid;
+            grid-template-columns: repeat(3, 30px);
+            grid-template-rows: repeat(3, 30px);
+            background: #FFFFFF;
+        }
+
+        .pan-control a {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            border: 0;
+            border-radius: 0;
+            color: var(--text);
+        }
+
+        .pan-control a:hover { background: var(--raised); }
+        .pan-control a:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+        .pan-control .pan-up { grid-area: 1 / 2; }
+        .pan-control .pan-left { grid-area: 2 / 1; }
+        .pan-control .pan-fit { grid-area: 2 / 2; }
+        .pan-control .pan-right { grid-area: 2 / 3; }
+        .pan-control .pan-down { grid-area: 3 / 2; }
         .sighting-marker span {
             display: block;
             width: 11px;
@@ -191,7 +220,7 @@
             margin: 20px 0 8px;
             color: var(--muted);
             font-size: 14px;
-            font-weight: 600;
+            font-weight: 700;
         }
 
         .unit, .hit {
@@ -213,7 +242,7 @@
         .unit:hover, .hit:hover { border-color: var(--accent); background: var(--raised); }
         .unit:focus-visible, .hit:focus-visible, button:focus-visible, select:focus-visible,
         input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-        .unit-name { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+        .unit-name { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; }
         .dot { display: inline-block; width: 10px; height: 10px; flex: none; border-radius: 50%; }
         .meta { color: var(--muted); margin-top: 5px; line-height: 1.45; }
         .backlog { color: var(--review); font-weight: 600; }
@@ -423,12 +452,89 @@
         let map = null;
         if (window.L) {
             // drawn on a canvas, so thousands of searched squares stay quick
-            map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([0, 20], 3);
+            // the wheel is handled below like a touchpad, so leaflet's own wheel zoom is off
+            // zoomSnap lets a pinch zoom in small steps instead of jumping a whole level
+            map = L.map('map', { zoomControl: true, preferCanvas: true, scrollWheelZoom: false, zoomSnap: 0.25 }).setView([0, 20], 3);
             const background = L.tileLayer(tiles, { maxZoom: 19, attribution: plain(tilesCredit) }).addTo(map);
             background.once('tileerror', () =>
                 mapNote('The map background could not load. Units and sightings are still in the right places.'));
         } else {
             mapNote('The map could not load. Units and sightings are listed on the right.');
+        }
+
+        // arrows that move the map a third of its size, for anyone not dragging it with a mouse
+        if (map) {
+            // icons are built as elements, the page never sets html from strings
+            const glyph = (d) => {
+                const ns = 'http://www.w3.org/2000/svg';
+                const svg = document.createElementNS(ns, 'svg');
+                const path = document.createElementNS(ns, 'path');
+                for (const [k, v] of [['width', '14'], ['height', '14'], ['viewBox', '0 0 16 16'], ['aria-hidden', 'true']]) svg.setAttribute(k, v);
+                for (const [k, v] of [['d', d], ['fill', 'none'], ['stroke', 'currentColor'], ['stroke-width', '2.2'],
+                                      ['stroke-linecap', 'round'], ['stroke-linejoin', 'round']]) path.setAttribute(k, v);
+                svg.append(path);
+                return svg;
+            };
+            const moves = [
+                ['up', 'Move the map up', 0, -1, 'M3.5 10.5 8 6l4.5 4.5'],
+                ['left', 'Move the map left', -1, 0, 'M10.5 3.5 6 8l4.5 4.5'],
+                ['right', 'Move the map right', 1, 0, 'M5.5 3.5 10 8l-4.5 4.5'],
+                ['down', 'Move the map down', 0, 1, 'M3.5 5.5 8 10l4.5-4.5'],
+            ];
+            const Pan = L.Control.extend({
+                options: { position: 'topleft' },
+                onAdd() {
+                    const box = L.DomUtil.create('div', 'leaflet-bar pan-control');
+                    const button = (name, label, act, d) => {
+                        const link = L.DomUtil.create('a', 'pan-' + name, box);
+                        link.href = '#';
+                        link.title = label;
+                        link.setAttribute('role', 'button');
+                        link.setAttribute('aria-label', label);
+                        link.append(glyph(d));
+                        L.DomEvent.on(link, 'click', (event) => { L.DomEvent.preventDefault(event); act(); });
+                    };
+                    for (const [name, label, x, y, d] of moves) {
+                        button(name, label, () => {
+                            const size = map.getSize();
+                            map.panBy([x * size.x / 3, y * size.y / 3]);
+                        }, d);
+                    }
+                    button('fit', 'Show every unit and sighting', () => showEverything(), 'M3 6.5V3h3.5M9.5 3H13v3.5M13 9.5V13H9.5M6.5 13H3V9.5');
+                    L.DomEvent.disableClickPropagation(box);
+                    return box;
+                }
+            });
+            new Pan().addTo(map);
+        }
+
+        // touchpad style scrolling, the way a page scrolls
+        // two fingers move the map in any direction, a pinch zooms around the pointer,
+        // a mouse wheel moves the map up and down, and ctrl with the wheel zooms
+        if (map) {
+            let pinch = 0;
+            map.getContainer().addEventListener('wheel', (event) => {
+                event.preventDefault();
+                if (event.ctrlKey) {
+                    // browsers report a touchpad pinch as a wheel event with ctrl held
+                    pinch -= event.deltaY * 0.01;
+                    if (Math.abs(pinch) >= 0.25) {
+                        map.setZoomAround(map.mouseEventToContainerPoint(event), map.getZoom() + pinch, { animate: false });
+                        pinch = 0;
+                    }
+                    return;
+                }
+                // deltas can come in pixels, lines or pages
+                const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? map.getSize().y : 1;
+                map.panBy([event.deltaX * unit, event.deltaY * unit], { animate: false });
+            }, { passive: false });
+        }
+
+        function showEverything() {
+            // zooms out to every unit and sighting on the map
+            if (!map) return;
+            const points = [...unitMarkers.values(), ...hitMarkers.values()].map(m => m.getLatLng());
+            if (points.length) map.fitBounds(L.latLngBounds(points).pad(0.3), { maxZoom: 17 });
         }
 
         function lookAt(latitude, longitude, zoom) {
