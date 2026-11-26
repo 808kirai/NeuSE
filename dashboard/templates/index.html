@@ -31,7 +31,7 @@
             --line: #CBD6D2;
             --accent: #006F69;
             --candidate: #006C84;
-            --online: #126B3F;
+            --online: #22C55E;
             --review: #7A4900;
             --error: #A12226;
         }
@@ -68,8 +68,8 @@
 
         /* live blinks green, an action in progress blinks black and white, slow enough to be safe to watch */
         @keyframes live-blink {
-            0%, 100% { background: var(--online); border-color: var(--online); color: #FFFFFF; }
-            50% { background: var(--surface); border-color: var(--online); color: var(--online); }
+            0%, 100% { background: var(--online); border-color: var(--online); color: #0B2614; }
+            50% { background: var(--surface); border-color: var(--online); color: var(--text); }
         }
 
         @keyframes busy-blink {
@@ -97,7 +97,7 @@
         @media (prefers-reduced-motion: reduce) {
             /* no blinking, the same colours held still */
             .status-pill { animation: none !important; }
-            .status-pill[data-state="ready"] { background: var(--online); border-color: var(--online); color: #FFFFFF; }
+            .status-pill[data-state="ready"] { background: var(--online); border-color: var(--online); color: #0B2614; }
             .status-pill[data-state="loading"] { background: #000000; border-color: #000000; color: #FFFFFF; }
         }
         :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }

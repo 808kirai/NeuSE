@@ -28,7 +28,7 @@
             --border: #6D7B7F;
             --line: #CBD6D2;
             --accent: #006F69;
-            --online: #126B3F;
+            --online: #22C55E;
             --offline: #4C5F63;
             --fresh: #006C84;
             --recent: #0057A3;
@@ -70,8 +70,8 @@
 
         /* live blinks green, an action in progress blinks black and white, slow enough to be safe to watch */
         @keyframes live-blink {
-            0%, 100% { background: var(--online); border-color: var(--online); color: #FFFFFF; }
-            50% { background: var(--surface); border-color: var(--online); color: var(--online); }
+            0%, 100% { background: var(--online); border-color: var(--online); color: #0B2614; }
+            50% { background: var(--surface); border-color: var(--online); color: var(--text); }
         }
 
         @keyframes busy-blink {
@@ -349,7 +349,7 @@
             *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
             /* no blinking, the same colours held still */
             .live-status, .report-controls button, .unit, .hit { animation: none !important; }
-            .live-status[data-state="ready"] { background: var(--online); border-color: var(--online); color: #FFFFFF; }
+            .live-status[data-state="ready"] { background: var(--online); border-color: var(--online); color: #0B2614; }
             .live-status[data-state="loading"], .report-controls button[data-busy] {
                 background: #000000; border-color: #000000; color: #FFFFFF;
             }
