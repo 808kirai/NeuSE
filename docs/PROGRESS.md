@@ -41,7 +41,7 @@ Decision - Train the future detector with MindYOLO on ModelArts, using the HIT-U
 - Daytime is the weak spot, mAP@0.5 0.004 by day against 0.129 at night
 - Built the person only copy of HIT-UAV in MindYOLO format, ready for ModelArts
 
-Reference - The HIT-UAV paper, Suo et al. 2023 table 4, reports person AP@0.5 on the same test images of 89.9% for YOLOv4, 85.6% for SSD-512, 75.5% for Faster R-CNN and 16.9% for YOLOv4-tiny. People are only about 14 by 15 pixels here. The YOLOv4-tiny figure is a poor guide to small detectors, see the entry of 2026-11-14.
+Reference - The HIT-UAV paper, Suo et al. 2023 table 4, reports person AP@0.5 on the same test images of 89.9% for YOLOv4, 85.6% for SSD-512, 75.5% for Faster R-CNN and 16.9% for YOLOv4-tiny. People are small here, the median person box is 12 by 19 pixels. The YOLOv4-tiny figure is a poor guide to small detectors, see the entry of 2026-11-14.
 
 Decision - Settings are tuned on the validation images and the test images are scored once, so the test numbers stay fair.
 
@@ -275,6 +275,6 @@ Searched for published research that supports each part of the problem statement
 
 - Time decides survival. Adams, Schmidt, Newgard et al. 2007 found finding survivors became unlikely after about 51 hours in Oregon search missions, and Macintyre, Barbera and Smith 2006 found no single cutoff for earthquake entrapment, with the longest survival averaging 6.8 days over 18 events. Both warn against reading their numbers as a fixed deadline, so the text does not use one
 - Networks fail. Yamamura, Kaneda and Mizobata 2014 report that medical teams rated mobile phones poor to moderate for the first four days after the 2011 Great East Japan earthquake. Matracia et al. 2022 survey post-disaster communications and Sobin et al. 2016 survey delay tolerant networking, the idea behind the store and forward sync
-- Drones need onboard detection. Burke et al. 2019, Lygouras et al. 2019, Kyrkou and Theocharides 2020, Mishra et al. 2020, Karaca et al. 2018 and Rudol and Doherty 2008, including that people become blobs in low resolution thermal at range, which matches the 14 by 15 pixel people in HIT-UAV
+- Drones need onboard detection. Burke et al. 2019, Lygouras et al. 2019, Kyrkou and Theocharides 2020, Mishra et al. 2020, Karaca et al. 2018 and Rudol and Doherty 2008, including that people become blobs in low resolution thermal at range, which matches HIT-UAV, where the median person box is 12 by 19 pixels
 
 Template 1 fits its 500 word background limit at 494 words, with the reference list at the end of the form. The short paper is submitted with Template 1, kept outside this repository with the other competition files, and gives the method, results, sync, command center, Huawei Cloud status, safety measures and limits in one place. Template 1 also now says 372 automated tests instead of 346.
