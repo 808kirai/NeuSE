@@ -268,3 +268,13 @@ Later the same day, after the team looked at the pages
 - Before the coordinator token was entered, the map page said Connection lost behind the token dialog, though nothing had failed. It now says Token needed and asks for the token, and goes live once the right one is entered
 
 Three new tests cover the first fix and fail on the old code. Both fixes were checked in Chrome. 372 tests pass.
+
+2026-11-27 - Research behind the problem
+
+Searched for published research that supports each part of the problem statement and cited it in Template 1 and a new four page technical paper. Every paper was found and its journal details checked, mostly from abstracts and publisher or repository pages, so claims only repeat what those pages say.
+
+- Time decides survival. Adams, Schmidt, Newgard et al. 2007 found finding survivors became unlikely after about 51 hours in Oregon search missions, and Macintyre, Barbera and Smith 2006 found no single cutoff for earthquake entrapment, with the longest survival averaging 6.8 days over 18 events. Both warn against reading their numbers as a fixed deadline, so the text does not use one
+- Networks fail. Yamamura, Kaneda and Mizobata 2014 report that medical teams rated mobile phones poor to moderate for the first four days after the 2011 Great East Japan earthquake. Matracia et al. 2022 survey post-disaster communications and Sobin et al. 2016 survey delay tolerant networking, the idea behind the store and forward sync
+- Drones need onboard detection. Burke et al. 2019, Lygouras et al. 2019, Kyrkou and Theocharides 2020, Mishra et al. 2020, Karaca et al. 2018 and Rudol and Doherty 2008, including that people become blobs in low resolution thermal at range, which matches the 14 by 15 pixel people in HIT-UAV
+
+Template 1 fits its 500 word background limit at 494 words, with the reference list at the end of the form. The short paper is submitted with Template 1, kept outside this repository with the other competition files, and gives the method, results, sync, command center, Huawei Cloud status, safety measures and limits in one place. Template 1 also now says 372 automated tests instead of 346.
