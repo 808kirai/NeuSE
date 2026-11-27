@@ -3,7 +3,8 @@ store and forward sync from a field unit to the command center
 detections wait in the local database until the command center confirms each one
 when the link is down nothing is lost, the unit keeps detecting and sends the backlog once it is back
 
-newest detections go first, so coordinators see the current picture as soon as a link returns
+waiting detections are an outbox, sent newest first, so coordinators see the current picture as soon as a link returns
+a tenth of every batch goes to the oldest waiting detections, so old sightings still get out when new ones keep coming
 resending is safe, the command center ignores detection ids it already has
 a detection the command center refuses is held back with the reason, counted and shown, never quietly dropped
 
@@ -40,6 +41,10 @@ waiting = "synced_at is null and sync_error is null"
 # rows the command center refused, held until someone retries them
 refused = "synced_at is null and sync_error is not null"
 
+# a tenth of every batch goes to the oldest waiting detections
+# newest first alone could leave old sightings waiting for ever on a busy unit with a weak link
+oldest_share = 0.1
+
 # the retry wait stops doubling after this many failures in a row
 # without a cap the sum overflows after about a thousand failures, a few days offline
 max_doublings = 16
@@ -51,18 +56,29 @@ class send_error(Exception):
 
 
 def pending(limit):
-    # the newest detections the command center has not confirmed yet
+    # the detections to send next, the newest first and a few of the oldest
+    # every batch carries the current picture, and old sightings still get out while new ones keep coming
+    reserve = max(1, int(limit * oldest_share)) if limit > 1 else 0
+    fields = ", ".join(("id",) + columns)
     with closing(connect()) as conn:
         conn.row_factory = sqlite3.Row
-        rows = conn.execute(f"""
-            select {", ".join(columns)} from detections
+        newest = conn.execute(f"""
+            select {fields} from detections
             where {waiting}
             order by id desc limit ?
-        """, (limit,)).fetchall()
+        """, (limit - reserve,)).fetchall()
+        oldest = []
+        if reserve and newest:
+            oldest = conn.execute(f"""
+                select {fields} from detections
+                where {waiting} and id < ?
+                order by id asc limit ?
+            """, (newest[-1]["id"], reserve)).fetchall()
 
     detections = []
-    for row in rows:
+    for row in list(newest) + list(oldest):
         detection = dict(row)
+        del detection["id"]
         # boxes are saved as text like [x, y, w, h]
         try:
             detection["bbox"] = json.loads(detection["bbox"]) if detection["bbox"] else None

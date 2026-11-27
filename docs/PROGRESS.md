@@ -278,3 +278,11 @@ Searched for published research that supports each part of the problem statement
 - Drones need onboard detection. Burke et al. 2019, Lygouras et al. 2019, Kyrkou and Theocharides 2020, Mishra et al. 2020, Karaca et al. 2018 and Rudol and Doherty 2008, including that people become blobs in low resolution thermal at range, which matches HIT-UAV, where the median person box is 12 by 19 pixels
 
 Template 1 fits its 500 word background limit at 494 words, with the reference list at the end of the form. The short paper is submitted with Template 1, kept outside this repository with the other competition files, and gives the method, results, sync, command center, Huawei Cloud status, safety measures and limits in one place. Template 1 also now says 372 automated tests instead of 346.
+
+2026-11-27 - Old sightings no longer wait behind new ones
+
+The unit's outbox was sent strictly newest first, so coordinators see the current picture as soon as a link returns. On a busy unit with a weak link that could leave old sightings waiting for ever, never lost but never sent while new ones kept arriving. Now ten places in every batch of 100 go to the oldest waiting sightings, and the rest stay newest first. When everything fits in one batch nothing changes.
+
+A new test runs a unit that logs 100 sightings a round on a link that drops after one batch. Before the change the 300 sightings it started with never left the unit, now the 50 oldest are through after five rounds and nothing is sent twice. The test fails on the old code and passes on the new. 374 tests pass.
+
+The docs, Template 1 and the technical paper now call the store an outbox, sent newest first with room for the oldest, since a strict newest first order behaves more like a stack than a queue.

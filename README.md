@@ -29,7 +29,7 @@ Working now
 - Safe handling of missing, empty, 16 bit, float and odd shaped frames, and of database errors, which no longer stop detection
 - Sightings placed on the ground when the unit gives its height, heading and camera tilt, and marked as placed at the unit when it does not
 - A local detection log, with the measured processing time of every frame
-- Store and forward sync. Detections queue on the unit and go to the command center whenever a link is up, newest first, with nothing lost or doubled when the link drops. One the command center refuses is held, counted and shown
+- Store and forward sync. Detections wait in an outbox on the unit and go to the command center whenever a link is up, newest first with room in every batch for the oldest, with nothing lost or doubled when the link drops. One the command center refuses is held, counted and shown
 - A command center that receives detections from many units, with a live map page for coordinators showing every unit, whether it is online, whether it is still searching, its backlog and its sightings of people
 - A map of the ground each unit's camera has searched, so coordinators can see where nobody has looked yet
 - Alerts for coordinators when an area gets several strong sightings, with text messages through Huawei Cloud SMN when it is set up
@@ -120,7 +120,7 @@ How sync works
 
 Every detection gets a unique id and the name of its unit when it is logged. It stays marked as waiting in the unit's own database until the command center confirms it.
 
-- `python -m src.sync` checks every 5 seconds and sends waiting detections in batches of 100, newest first, so coordinators see the current picture as soon as a link returns
+- `python -m src.sync` checks every 5 seconds and sends waiting detections in batches of 100, newest first, so coordinators see the current picture as soon as a link returns. Ten places in every batch go to the oldest waiting detections, so on a busy unit with a weak link old sightings still get out instead of waiting for ever
 - Batches are compressed, since field links can be slow and paid by the megabyte
 - When the command center cannot be reached, the unit keeps detecting and waits longer between tries, doubling up to 5 minutes with a little randomness so many units do not retry at once
 - Status and coverage sync failures also trigger this retry wait, even with no detections queued. The normal interval resumes once all enabled sync channels succeed
@@ -194,7 +194,7 @@ Layout
 - `src/person_cnn.py` - Runs the MindSpore trained person CNN with NumPy
 - `src/integrity.py` - Checks each model file against its recorded SHA-256 before it is loaded
 - `src/geo.py` - Places a sighting on the ground from the unit's height, heading and camera tilt, and works out the ground each frame covers
-- `src/logger.py` - Local detection log in SQLite, which doubles as the queue of detections to send
+- `src/logger.py` - Local detection log in SQLite, which doubles as the outbox of detections waiting to be sent
 - `src/sync.py` - Store and forward sync to the command center
 - `src/config.py` - Detector choice, thresholds, unit position and database location
 - `src/metrics.py` - Precision, recall and mAP against labelled boxes

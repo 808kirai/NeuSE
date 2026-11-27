@@ -110,7 +110,7 @@ def test_resending_after_a_lost_reply_does_not_duplicate(isolated_db, center):
     assert store.count(center.db) == 3
 
 
-def test_newest_detections_go_first_in_batches(isolated_db, monkeypatch):
+def test_batches_lead_with_the_newest_and_keep_room_for_the_oldest(isolated_db):
     log_hits(250)
     batches = []
 
@@ -120,7 +120,38 @@ def test_newest_detections_go_first_in_batches(isolated_db, monkeypatch):
 
     assert sync.sync_once(record, batch=100)["synced"] == 250
     assert [len(b) for b in batches] == [100, 100, 50]
-    assert batches[0][0] == 249 and batches[-1][-1] == 0
+    # 90 newest first, then the 10 oldest
+    assert batches[0][:90] == list(range(249, 159, -1)) and batches[0][90:] == list(range(10))
+    # every detection went exactly once
+    assert sorted(sum(batches, [])) == list(range(250))
+
+
+def test_old_sightings_still_get_out_when_new_ones_keep_coming(isolated_db):
+    # a busy unit on a weak link, 100 new detections each round and time for one batch before the link drops
+    # newest first alone would only ever send the new ones and leave the first 300 waiting for ever
+    log_hits(300)
+    sent = []
+
+    def one_batch_then_drop(detections):
+        if one_batch_then_drop.used:
+            raise sync.send_error("link dropped")
+        one_batch_then_drop.used = True
+        sent.extend(d["bbox"][0] for d in detections)
+        return {"accepted": [d["uid"] for d in detections]}
+
+    for round_number in range(5):
+        log_hits(100, start=300 + 100 * round_number)
+        one_batch_then_drop.used = False
+        sync.sync_once(one_batch_then_drop, batch=100)
+
+    # ten of the oldest went out in every batch, so the 50 oldest are through after five rounds
+    assert set(range(50)) <= set(sent)
+    assert len(sent) == len(set(sent)) == 500
+
+
+def test_a_batch_of_one_is_the_newest(isolated_db):
+    log_hits(3)
+    assert sync.pending(1)[0]["bbox"][0] == 2
 
 
 def test_boxes_are_sent_as_lists(isolated_db):
