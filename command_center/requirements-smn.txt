@@ -3,4 +3,4 @@
 # the sdk pins pymongo 4.18.2 and pyasn1 0.6.3 or older, which have known vulnerabilities, so its pins are skipped
 # and the fixed versions in requirements.txt are used, checked by publishing through the sdk to a test server
 huaweicloudsdksmn==3.1.222
-huaweicloudsdkcore==3.1.222
+huaweicloudsdkcore==3.1.223
