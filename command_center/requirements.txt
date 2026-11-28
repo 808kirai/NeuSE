@@ -11,7 +11,7 @@ cryptography==50.0.2
 certifi==2026.10.23
 pyasn1==0.6.5
 pymongo==4.19.0
-pyyaml==6.0.3
+pyyaml==6.0.4
 requests==2.34.2
 simplejson==4.3.0
 six==1.17.0
