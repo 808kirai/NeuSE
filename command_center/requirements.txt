@@ -8,7 +8,7 @@ cryptography==50.0.2
 # what the huawei cloud smn sdk needs to run, at releases with known security fixes
 # the sdk itself is in requirements-smn.txt, installed without its own pins, which hold back
 # pymongo and pyasn1 at versions with known vulnerabilities, see docs/SAFETY.md
-certifi==2026.10.23
+certifi==2026.11.20
 pyasn1==0.6.5
 pymongo==4.19.0
 pyyaml==6.0.3
